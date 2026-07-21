@@ -67,7 +67,7 @@ export async function createPublicRoomBooking(input: {
       total,
       deposit_amount: 0,
       status: 'pending',
-      payment_status: 'unpaid',
+      payment_status: 'pending',
       source: 'online',
     })
     .select()
@@ -100,7 +100,7 @@ export async function createPublicTrainingPackage(input: {
       visitor_count: 1,
       price,
       payment_method: 'cash',
-      payment_status: 'unpaid',
+      payment_status: 'pending',
       valid_date: new Date().toISOString().split('T')[0],
       check_in_time: new Date().toISOString(),
       notes: input.packageName,
