@@ -12,6 +12,14 @@ __v0_jsx-dev-runtime.ts
 # Common ignores
 node_modules
 .next/
-.DS_Storetsconfig.tsbuildinfo
 .DS_Store
 **/.DS_Store
+tsconfig.tsbuildinfo
+
+# Temp scripts
+query_db.js
+setup_rooms.js
+test_action.js
+build.log
+lint.log
+build_checks_done.txt
