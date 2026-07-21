@@ -39,11 +39,23 @@ const ROLE_LANDING: Record<string, string> = {
 }
 
 export async function middleware(request: NextRequest) {
-  const { supabase, supabaseResponse } = createClient(request)
-  const pathname = request.nextUrl.pathname
+  let supabase;
+  let supabaseResponse = NextResponse.next({ request });
+  let user = null;
+  const pathname = request.nextUrl.pathname;
 
-  // Refresh session — this keeps the session alive and updates cookies
-  const { data: { user } } = await supabase.auth.getUser()
+  try {
+    const client = createClient(request);
+    supabase = client.supabase;
+    supabaseResponse = client.supabaseResponse;
+
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch (error) {
+    console.error('Middleware Supabase error:', error);
+    // On error (e.g., missing env vars), treat as unauthenticated but don't crash
+    user = null;
+  }
 
   const isPublicRoute = PUBLIC_ROUTES.some(
     r => pathname === r || pathname.startsWith(r + '/')
@@ -67,8 +79,13 @@ export async function middleware(request: NextRequest) {
   // === CASE 1: Auth route ===
   // Already logged in → redirect to their dashboard
   if (isAuthRoute && user) {
-    const roleName = await getUserRole(supabase, user.id)
-    const landing = ROLE_LANDING[roleName ?? ''] ?? '/admin/dashboard'
+    let landing = '/admin/dashboard';
+    try {
+      const roleName = await getUserRole(supabase, user.id);
+      landing = ROLE_LANDING[roleName ?? ''] ?? '/admin/dashboard';
+    } catch (e) {
+      console.error('Error fetching role in middleware:', e);
+    }
     return NextResponse.redirect(new URL(landing, request.url))
   }
 
