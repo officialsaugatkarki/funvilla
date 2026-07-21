@@ -5,7 +5,7 @@ import { Toaster } from 'sonner'
 import './globals.css'
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://khukuri-resort.com'),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://khukuri-resort.com')),
   title: {
     default: 'Khukuri Restaurant & Resort | Premium Dining & Stay in Nepal',
     template: '%s | Khukuri Restaurant & Resort',
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: 'https://khukuri-resort.com',
+    url: process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://khukuri-resort.com'),
     title: 'Khukuri Restaurant & Resort',
     description: 'Experience authentic Nepali cuisine, premium luxury stays, and relaxing pool amenities at Khukuri Restaurant & Resort.',
     siteName: 'Khukuri Restaurant & Resort',
