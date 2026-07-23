@@ -588,24 +588,26 @@ export default function POSClient({
           <button
             onClick={() => setMobileTab('cart')}
             className={cn(
-              'flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all relative',
+              'flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all',
               mobileTab === 'cart'
                 ? 'bg-background text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
             )}
           >
-            <ShoppingCart className="h-4 w-4" />
-            Order / Active
-            {cartCount > 0 && (
-              <span className="absolute top-1.5 right-6 bg-primary text-primary-foreground text-[10px] font-bold min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1">
-                {cartCount}
-              </span>
-            )}
-            {cartCount === 0 && activeOrders.length > 0 && (
-              <span className="absolute top-1.5 right-6 bg-primary text-primary-foreground text-[10px] font-bold min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1">
-                {activeOrders.length}
-              </span>
-            )}
+            <div className="flex items-center gap-1.5">
+              <ShoppingCart className="h-4 w-4" />
+              <span>Order / Active</span>
+              {cartCount > 0 && (
+                <span className="bg-primary text-primary-foreground text-[10px] font-bold min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1">
+                  {cartCount}
+                </span>
+              )}
+              {cartCount === 0 && activeOrders.length > 0 && (
+                <span className="bg-primary text-primary-foreground text-[10px] font-bold min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1">
+                  {activeOrders.length}
+                </span>
+              )}
+            </div>
           </button>
         </div>
 
