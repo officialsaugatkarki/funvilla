@@ -127,6 +127,15 @@ export async function placeQrOrder(
     return { data: null, error: `Failed to save order items: ${itemsError.message}` }
   }
 
+  // Notify staff
+  const { createNotification } = await import('./notifications.actions')
+  await createNotification({
+    restaurantId: restaurant.id,
+    type: 'new_order',
+    title: 'New QR Order',
+    message: `Order #${order.order_number} placed via QR code (${input.tableNumber ? `Table ${input.tableNumber}` : 'Takeaway'})`
+  })
+
   return {
     data: {
       orderId: order.id,

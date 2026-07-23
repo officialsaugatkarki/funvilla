@@ -105,6 +105,16 @@ export async function createOrder(input: CreateOrderInput): Promise<ApiResponse<
   }
 
   await logActivity({ restaurantId: user.restaurantId, userId: user.id, action: 'order.created', resourceType: 'order', resourceId: order.id })
+
+  // Notify Kitchen
+  const { createNotification } = await import('./notifications.actions')
+  await createNotification({
+    restaurantId: user.restaurantId,
+    type: 'new_order',
+    title: 'New Order Created',
+    message: `Order #${order.order_number} has been created and sent to the kitchen.`
+  })
+
   revalidatePath('/admin/orders')
   revalidatePath('/admin/tables')
   revalidatePath('/admin/kitchen')
@@ -198,6 +208,22 @@ export async function updateOrderItemStatus(
     .eq('id', itemId)
 
   if (error) return { data: null, error: error.message }
+
+  if (status === 'ready' || status === 'served') {
+    const { createNotification } = await import('./notifications.actions')
+    
+    // Fetch order number
+    const { data: orderItem } = await supabase.from('order_items').select('orders(order_number)').eq('id', itemId).single()
+    const orderNumber = (orderItem?.orders as any)?.order_number || 'Unknown'
+    
+    await createNotification({
+      restaurantId: user.restaurantId,
+      type: 'room_ready', // We can repurpose this or use a generic one
+      title: `Order Item ${status === 'ready' ? 'Ready' : 'Served'}`,
+      message: `An item in Order #${orderNumber} is ${status}.`
+    })
+  }
+
   revalidatePath('/admin/kitchen')
   revalidatePath('/admin/orders')
   return { data: null, error: null }
@@ -263,6 +289,27 @@ export async function getKitchenOrders(): Promise<ApiResponse<any[]>> {
     .eq('restaurant_id', user.restaurantId)
     .in('status', ['pending', 'confirmed', 'preparing'])
     .order('created_at', { ascending: true })
+
+  if (error) return { data: null, error: error.message }
+  return { data, error: null }
+}
+
+export async function getActiveOrdersForPOS(): Promise<ApiResponse<any[]>> {
+  const user = await requirePermission(PERMISSIONS.POS_ACCESS)
+  const supabase = await createClient()
+
+  const { data, error } = await supabase
+    .from('orders')
+    .select(`
+      id, order_number, order_type, status, payment_status, total, created_at,
+      subtotal, tax_amount, service_charge_amount, discount_amount, customer_name,
+      restaurant_tables(table_number),
+      order_items(id, menu_item_name, quantity, unit_price, status)
+    `)
+    .eq('restaurant_id', user.restaurantId)
+    .neq('status', 'cancelled')
+    .neq('payment_status', 'paid')
+    .order('created_at', { ascending: false })
 
   if (error) return { data: null, error: error.message }
   return { data, error: null }

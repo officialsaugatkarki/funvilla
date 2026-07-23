@@ -4,7 +4,7 @@ import { useState, useTransition, useEffect } from 'react'
 import { toast } from 'sonner'
 import {
   Plus, Minus, Search, ShoppingCart, CreditCard,
-  ChefHat, X, Split, Receipt, Trash2, UtensilsCrossed
+  ChefHat, X, Split, Receipt, Trash2, UtensilsCrossed, ListOrdered, CheckCircle2, Clock
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import Image from 'next/image'
-import { createOrder, processPayment } from '@/lib/actions/orders.actions'
+import { createOrder, processPayment, getActiveOrdersForPOS } from '@/lib/actions/orders.actions'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 
@@ -30,12 +30,13 @@ interface CartItem {
 }
 
 export default function POSClient({
-  categories, items, tables, discounts, taxRate, serviceChargeRate
+  categories, items, tables, discounts, initialActiveOrders, taxRate, serviceChargeRate
 }: {
   categories: any[]
   items: any[]
   tables: any[]
   discounts: any[]
+  initialActiveOrders: any[]
   taxRate: number
   serviceChargeRate: number
 }) {
@@ -46,8 +47,12 @@ export default function POSClient({
   const [selectedTable, setSelectedTable] = useState<string>('')
   const [customerName, setCustomerName] = useState('')
 
-  // Mobile tab: 'menu' | 'cart'
+  // View modes
+  const [posMode, setPosMode] = useState<'new_order' | 'active_orders'>('new_order')
   const [mobileTab, setMobileTab] = useState<'menu' | 'cart'>('menu')
+
+  // Active Orders state
+  const [activeOrders, setActiveOrders] = useState<any[]>(initialActiveOrders)
 
   // Payment state
   const [isPaymentOpen, setIsPaymentOpen] = useState(false)
@@ -68,11 +73,15 @@ export default function POSClient({
 
   const [isPending, startTransition] = useTransition()
 
-  // Realtime
+  // Realtime Orders
   useEffect(() => {
     const supabase = createClient()
-    const channel = supabase.channel('pos-orders')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, () => {})
+    const channel = supabase.channel('pos-orders-channel')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, async () => {
+        // Fetch fresh active orders to ensure accurate calculations and states
+        const res = await getActiveOrdersForPOS()
+        if (res.data) setActiveOrders(res.data)
+      })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [])
@@ -84,6 +93,7 @@ export default function POSClient({
   })
 
   function addToCart(item: any) {
+    if (posMode !== 'new_order') setPosMode('new_order')
     setCart(prev => {
       const existing = prev.find(i => i.menuItemId === item.id)
       if (existing) {
@@ -124,7 +134,10 @@ export default function POSClient({
   const total = postDiscount + tax + serviceCharge
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0)
 
-  useEffect(() => { setAmountPaid(total.toFixed(2)) }, [total])
+  // Payment total calculation based on whether it's a new order or an existing one
+  const paymentTotal = currentOrderId ? (activeOrders.find(o => o.id === currentOrderId)?.total ?? total) : total
+
+  useEffect(() => { setAmountPaid(paymentTotal.toFixed(2)) }, [paymentTotal])
 
   async function handlePlaceOrder() {
     if (cart.length === 0) { toast.error('Add items to the order first'); return }
@@ -154,9 +167,26 @@ export default function POSClient({
     })
   }
 
+  function handlePayActiveOrder(order: any) {
+    setCurrentOrderId(order.id)
+    setCompletedOrder({
+      ...order,
+      items: order.order_items.map((i: any) => ({
+        name: i.menu_item_name,
+        quantity: i.quantity,
+        price: i.unit_price
+      })),
+      discountAmount: order.discount_amount,
+      tax: order.tax_amount,
+      serviceCharge: order.service_charge_amount,
+      total: order.total
+    })
+    setIsPaymentOpen(true)
+  }
+
   async function handlePayment() {
     if (!currentOrderId) return
-    const paid = parseFloat(amountPaid) || total
+    const paid = parseFloat(amountPaid) || paymentTotal
 
     startTransition(async () => {
       const result = await processPayment(currentOrderId, paymentMethod, paid)
@@ -164,6 +194,9 @@ export default function POSClient({
       toast.success('Payment processed!')
       setIsPaymentOpen(false)
       setIsReceiptOpen(true)
+      
+      // Remove from active orders locally to reflect immediately
+      setActiveOrders(prev => prev.filter(o => o.id !== currentOrderId))
     })
   }
 
@@ -176,23 +209,102 @@ export default function POSClient({
     setSelectedTable('')
     setDiscountValue('')
     setSplitBy(1)
+    setPosMode('new_order')
     setMobileTab('menu')
   }
 
-  // ── Shared: Order Panel content ────────────────────────────────────────────
-  const OrderPanel = (
+  // ── Active Orders Panel ────────────────────────────────────────────────────
+  const ActiveOrdersPanel = (
+    <div className="flex flex-col h-full bg-background rounded-xl border overflow-hidden">
+      <div className="p-4 border-b space-y-3 shrink-0 bg-muted/20">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <h2 className="font-semibold flex items-center gap-2 text-sm">
+            <ListOrdered className="h-4 w-4 text-primary" /> Active Orders ({activeOrders.length})
+          </h2>
+          <Button variant="outline" size="sm" onClick={() => setPosMode('new_order')} className="h-8">
+            <Plus className="h-3.5 w-3.5 mr-1" /> New Order
+          </Button>
+        </div>
+      </div>
+      
+      <ScrollArea className="flex-1">
+        <div className="p-3">
+          {activeOrders.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
+              <CheckCircle2 className="h-12 w-12 opacity-20 mb-3" />
+              <p className="text-sm font-medium">No active orders</p>
+              <p className="text-xs">All orders have been paid and settled.</p>
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              {activeOrders.map(order => (
+                <div key={order.id} className="border rounded-lg p-3 hover:shadow-md transition-all bg-card flex flex-col gap-3 group">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-semibold text-sm">#{order.order_number}</span>
+                        <Badge variant={order.status === 'served' || order.status === 'ready' ? 'default' : 'secondary'} className="text-[10px] px-1.5 py-0 capitalize h-5">
+                          {order.status}
+                        </Badge>
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 capitalize h-5">
+                          {order.order_type.replace('_', ' ')}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                        <Clock className="w-3 h-3" />
+                        {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {order.restaurant_tables?.table_number && ` • Table ${order.restaurant_tables.table_number}`}
+                        {order.customer_name && ` • ${order.customer_name}`}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-primary">NPR {order.total.toFixed(0)}</p>
+                      <p className="text-[10px] text-muted-foreground">{order.order_items?.length || 0} items</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-end pt-2 border-t mt-1">
+                    <Button 
+                      size="sm" 
+                      onClick={() => handlePayActiveOrder(order)}
+                      className="h-8 shadow-sm group-hover:bg-primary/90"
+                    >
+                      <CreditCard className="w-3.5 h-3.5 mr-1.5" /> Pay & Settle
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </ScrollArea>
+    </div>
+  )
+
+  // ── New Order Panel content ────────────────────────────────────────────
+  const NewOrderPanel = (
     <div className="flex flex-col h-full bg-background rounded-xl border overflow-hidden">
       {/* Order header */}
       <div className="p-4 border-b space-y-3 shrink-0">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <h2 className="font-semibold flex items-center gap-2 text-sm">
             <ShoppingCart className="h-4 w-4 text-primary" /> New Order
           </h2>
-          {cart.length > 0 && (
-            <button onClick={() => setCart([])} className="text-muted-foreground hover:text-destructive transition-colors p-1 rounded">
-              <Trash2 className="h-4 w-4" />
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {cart.length > 0 && (
+              <button onClick={() => setCart([])} className="text-muted-foreground hover:text-destructive transition-colors p-1 rounded">
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
+            <Button variant="outline" size="sm" onClick={() => setPosMode('active_orders')} className="h-8">
+              <ListOrdered className="h-3.5 w-3.5 mr-1" /> Active
+              {activeOrders.length > 0 && (
+                <span className="ml-1.5 bg-primary/10 text-primary px-1.5 rounded-full text-[10px] font-bold">
+                  {activeOrders.length}
+                </span>
+              )}
+            </Button>
+          </div>
         </div>
 
         {/* Order type toggle */}
@@ -222,7 +334,7 @@ export default function POSClient({
             <SelectContent>
               {tables.filter(t => t.status !== 'occupied').map(t => (
                 <SelectItem key={t.id} value={t.id}>
-                  Table {t.table_number} ({t.capacity} seats)
+                  {t.table_number} ({t.capacity} seats)
                 </SelectItem>
               ))}
             </SelectContent>
@@ -346,6 +458,8 @@ export default function POSClient({
     </div>
   )
 
+  const RightPanel = posMode === 'new_order' ? NewOrderPanel : ActiveOrdersPanel
+
   // ── Shared: Menu Panel content ─────────────────────────────────────────────
   const MenuPanel = (
     <div className="flex flex-col h-full gap-3">
@@ -451,7 +565,7 @@ export default function POSClient({
         </div>
         {/* Order ticket - right */}
         <div className="w-80 lg:w-96 shrink-0 flex flex-col">
-          {OrderPanel}
+          {RightPanel}
         </div>
       </div>
 
@@ -481,10 +595,15 @@ export default function POSClient({
             )}
           >
             <ShoppingCart className="h-4 w-4" />
-            Order
+            Order / Active
             {cartCount > 0 && (
               <span className="absolute top-1.5 right-6 bg-primary text-primary-foreground text-[10px] font-bold min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1">
                 {cartCount}
+              </span>
+            )}
+            {cartCount === 0 && activeOrders.length > 0 && (
+              <span className="absolute top-1.5 right-6 bg-primary text-primary-foreground text-[10px] font-bold min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1">
+                {activeOrders.length}
               </span>
             )}
           </button>
@@ -492,7 +611,7 @@ export default function POSClient({
 
         {/* Tab content */}
         <div className="flex-1 overflow-hidden">
-          {mobileTab === 'menu' ? MenuPanel : OrderPanel}
+          {mobileTab === 'menu' ? MenuPanel : RightPanel}
         </div>
 
         {/* Mobile sticky bottom CTA when on menu tab and cart has items */}
@@ -520,7 +639,7 @@ export default function POSClient({
           </DialogHeader>
           <div className="space-y-5">
             <div className="bg-primary/10 rounded-xl p-5 text-center">
-              <p className="text-4xl font-bold text-primary">NPR {total.toFixed(0)}</p>
+              <p className="text-4xl font-bold text-primary">NPR {paymentTotal.toFixed(0)}</p>
               <p className="text-sm text-muted-foreground mt-1">Total Amount Due</p>
             </div>
 
@@ -553,9 +672,9 @@ export default function POSClient({
                   onChange={e => setAmountPaid(e.target.value)}
                   className="h-12 text-xl text-center font-bold"
                 />
-                {parseFloat(amountPaid) > total && (
+                {parseFloat(amountPaid) > paymentTotal && (
                   <p className="text-sm text-center text-emerald-600 font-medium">
-                    Change: NPR {(parseFloat(amountPaid) - total).toFixed(0)}
+                    Change: NPR {(parseFloat(amountPaid) - paymentTotal).toFixed(0)}
                   </p>
                 )}
               </div>
@@ -573,7 +692,7 @@ export default function POSClient({
                     className="h-9 w-24 text-center"
                   />
                   <span className="text-sm font-medium text-muted-foreground">
-                    {splitBy > 1 ? `NPR ${(total / splitBy).toFixed(0)} per person` : 'persons'}
+                    {splitBy > 1 ? `NPR ${(paymentTotal / splitBy).toFixed(0)} per person` : 'persons'}
                   </span>
                 </div>
               </div>
@@ -604,7 +723,7 @@ export default function POSClient({
             <div className="text-xs space-y-1 mb-4 border-y border-dashed py-3">
               <div className="flex justify-between"><span>Bill No:</span><span className="font-bold">#{completedOrder?.order_number}</span></div>
               <div className="flex justify-between"><span>Date:</span><span>{new Date().toLocaleString('en-NP', { dateStyle: 'medium', timeStyle: 'short' })}</span></div>
-              <div className="flex justify-between"><span>Type:</span><span className="capitalize">{orderType.replace('_', '-')}</span></div>
+              <div className="flex justify-between"><span>Type:</span><span className="capitalize">{completedOrder?.order_type?.replace('_', '-') || 'Dine-in'}</span></div>
               <div className="flex justify-between"><span>Payment:</span><span className="capitalize font-semibold">{paymentMethod}</span></div>
             </div>
 
@@ -644,7 +763,7 @@ export default function POSClient({
 
           <DialogFooter className="flex-col sm:flex-row gap-2 mt-4">
             <Button variant="outline" className="flex-1" onClick={resetPOS}>
-              New Order
+              Close & New
             </Button>
             <Button
               className="flex-1"
