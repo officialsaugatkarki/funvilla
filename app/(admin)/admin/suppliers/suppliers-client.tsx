@@ -66,8 +66,8 @@ export default function SuppliersClient({ initialSuppliers }: { initialSuppliers
       </div>
 
       <Card>
-        <CardContent className="p-0">
-          <Table>
+        <CardContent className="p-0 overflow-x-auto">
+          <Table className="min-w-[600px]">
             <TableHeader>
               <TableRow>
                 <TableHead>Supplier</TableHead>

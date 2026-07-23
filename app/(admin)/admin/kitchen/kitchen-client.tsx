@@ -15,20 +15,32 @@ function ElapsedTime({ startTime }: { startTime: string }) {
 
   useEffect(() => {
     const start = new Date(startTime).getTime()
-    const interval = setInterval(() => {
+    
+    const updateTime = () => {
       const now = new Date().getTime()
-      const diff = Math.floor((now - start) / 60000) // in minutes
-      setElapsed(`${diff}m`)
-    }, 10000) // update every 10 seconds
+      const diffMs = now - start
+      const totalMins = Math.floor(diffMs / 60000)
+      
+      if (totalMins < 60) {
+        setElapsed(`${totalMins}m`)
+      } else if (totalMins < 1440) {
+        const h = Math.floor(totalMins / 60)
+        const m = totalMins % 60
+        setElapsed(`${h}h ${m}m`)
+      } else {
+        const d = Math.floor(totalMins / 1440)
+        const h = Math.floor((totalMins % 1440) / 60)
+        setElapsed(`${d}d ${h}h`)
+      }
+    }
 
-    // Initial calc
-    const now = new Date().getTime()
-    setElapsed(`${Math.floor((now - start) / 60000)}m`)
+    const interval = setInterval(updateTime, 60000) // update every minute
+    updateTime() // Initial calc
 
     return () => clearInterval(interval)
   }, [startTime])
 
-  return <span className="flex items-center gap-1 text-muted-foreground"><Clock className="w-3 h-3"/> {elapsed}</span>
+  return <span className="flex items-center gap-1 text-muted-foreground whitespace-nowrap text-xs font-semibold"><Clock className="w-3 h-3"/> {elapsed}</span>
 }
 
 export default function KitchenClient({ initialOrders }: { initialOrders: any[] }) {

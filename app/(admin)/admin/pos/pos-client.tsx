@@ -2,7 +2,10 @@
 
 import { useState, useTransition, useEffect } from 'react'
 import { toast } from 'sonner'
-import { Plus, Minus, Search, ShoppingCart, CreditCard, ChefHat, X, Split, Receipt, Percent } from 'lucide-react'
+import {
+  Plus, Minus, Search, ShoppingCart, CreditCard,
+  ChefHat, X, Split, Receipt, Trash2, UtensilsCrossed
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -10,9 +13,11 @@ import { Separator } from '@/components/ui/separator'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
 import Image from 'next/image'
 import { createOrder, processPayment } from '@/lib/actions/orders.actions'
 import { createClient } from '@/lib/supabase/client'
+import { cn } from '@/lib/utils'
 
 interface CartItem {
   menuItemId: string
@@ -40,21 +45,24 @@ export default function POSClient({
   const [orderType, setOrderType] = useState<'dine_in' | 'takeaway'>('dine_in')
   const [selectedTable, setSelectedTable] = useState<string>('')
   const [customerName, setCustomerName] = useState('')
-  
+
+  // Mobile tab: 'menu' | 'cart'
+  const [mobileTab, setMobileTab] = useState<'menu' | 'cart'>('menu')
+
   // Payment state
   const [isPaymentOpen, setIsPaymentOpen] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState('cash')
   const [currentOrderId, setCurrentOrderId] = useState<string | null>(null)
   const [amountPaid, setAmountPaid] = useState<string>('')
-  
-  // Split bill state
+
+  // Split bill
   const [splitBy, setSplitBy] = useState<number>(1)
 
-  // Receipt state
+  // Receipt
   const [isReceiptOpen, setIsReceiptOpen] = useState(false)
   const [completedOrder, setCompletedOrder] = useState<any>(null)
-  
-  // Discount state
+
+  // Discount
   const [discountValue, setDiscountValue] = useState<string>('')
   const [discountType, setDiscountType] = useState<'percent' | 'fixed'>('percent')
 
@@ -64,9 +72,7 @@ export default function POSClient({
   useEffect(() => {
     const supabase = createClient()
     const channel = supabase.channel('pos-orders')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload: any) => {
-        console.log('New order inserted:', payload)
-      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, () => {})
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [])
@@ -103,8 +109,7 @@ export default function POSClient({
   }
 
   const subtotal = cart.reduce((sum, i) => sum + i.price * i.quantity, 0)
-  
-  // Calculate discount
+
   let discountAmount = 0
   const dVal = parseFloat(discountValue) || 0
   if (discountType === 'percent') {
@@ -112,16 +117,14 @@ export default function POSClient({
   } else {
     discountAmount = Math.min(dVal, subtotal)
   }
-  
+
   const postDiscount = Math.max(0, subtotal - discountAmount)
   const tax = Math.round(postDiscount * (taxRate / 100) * 100) / 100
   const serviceCharge = Math.round(postDiscount * (serviceChargeRate / 100) * 100) / 100
   const total = postDiscount + tax + serviceCharge
+  const cartCount = cart.reduce((s, i) => s + i.quantity, 0)
 
-  // Set default amount paid when total changes
-  useEffect(() => {
-    setAmountPaid(total.toString())
-  }, [total])
+  useEffect(() => { setAmountPaid(total.toFixed(2)) }, [total])
 
   async function handlePlaceOrder() {
     if (cart.length === 0) { toast.error('Add items to the order first'); return }
@@ -145,15 +148,7 @@ export default function POSClient({
       })
       if (result.error) { toast.error(result.error); return }
       setCurrentOrderId(result.data!.id)
-      setCompletedOrder({
-        ...result.data,
-        items: cart,
-        subtotal,
-        discountAmount,
-        tax,
-        serviceCharge,
-        total
-      })
+      setCompletedOrder({ ...result.data, items: cart, subtotal, discountAmount, tax, serviceCharge, total })
       setIsPaymentOpen(true)
       toast.success(`Order #${result.data!.order_number} created!`)
     })
@@ -162,14 +157,13 @@ export default function POSClient({
   async function handlePayment() {
     if (!currentOrderId) return
     const paid = parseFloat(amountPaid) || total
-    
+
     startTransition(async () => {
       const result = await processPayment(currentOrderId, paymentMethod, paid)
       if (result.error) { toast.error(result.error); return }
-      toast.success(paid < total ? 'Partial payment recorded' : 'Payment processed successfully!')
-      
+      toast.success('Payment processed!')
       setIsPaymentOpen(false)
-      setIsReceiptOpen(true) // Open receipt
+      setIsReceiptOpen(true)
     })
   }
 
@@ -182,333 +176,487 @@ export default function POSClient({
     setSelectedTable('')
     setDiscountValue('')
     setSplitBy(1)
+    setMobileTab('menu')
   }
 
-  return (
-    <div className="flex h-[calc(100vh-8rem)] gap-4">
-      {/* Left: Menu Items */}
-      <div className="flex flex-col gap-4 flex-1 min-w-0">
-        <div className="flex gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search menu..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
-          </div>
+  // ── Shared: Order Panel content ────────────────────────────────────────────
+  const OrderPanel = (
+    <div className="flex flex-col h-full bg-background rounded-xl border overflow-hidden">
+      {/* Order header */}
+      <div className="p-4 border-b space-y-3 shrink-0">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold flex items-center gap-2 text-sm">
+            <ShoppingCart className="h-4 w-4 text-primary" /> New Order
+          </h2>
+          {cart.length > 0 && (
+            <button onClick={() => setCart([])} className="text-muted-foreground hover:text-destructive transition-colors p-1 rounded">
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
         </div>
 
-        {/* Category Pills */}
-        <div className="flex gap-2 flex-wrap">
-          <button
-            onClick={() => setSelectedCategory('all')}
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${selectedCategory === 'all' ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:border-foreground'}`}
-          >All</button>
-          {categories.map(cat => (
+        {/* Order type toggle */}
+        <div className="grid grid-cols-2 gap-1.5 p-1 bg-muted rounded-lg">
+          {(['dine_in', 'takeaway'] as const).map(type => (
             <button
-              key={cat.id}
-              onClick={() => setSelectedCategory(cat.id)}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${selectedCategory === cat.id ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:border-foreground'}`}
-            >{cat.name}</button>
+              key={type}
+              onClick={() => setOrderType(type)}
+              className={cn(
+                'py-1.5 text-xs rounded-md font-semibold transition-all',
+                orderType === type
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              {type === 'dine_in' ? 'Dine In' : 'Takeaway'}
+            </button>
           ))}
         </div>
 
-        {/* Item Grid */}
-        <ScrollArea className="flex-1">
-          <div className="grid grid-cols-2 xl:grid-cols-3 gap-3 pr-2">
-            {filtered.map(item => (
-              <button
-                key={item.id}
-                onClick={() => addToCart(item)}
-                className="group border rounded-xl p-3 text-left hover:border-primary hover:shadow-sm transition-all bg-background"
-              >
-                {item.image_url ? (
-                  <div className="relative h-24 rounded-lg overflow-hidden mb-2">
-                    <Image src={item.image_url} alt={item.name} fill className="object-cover group-hover:scale-105 transition-transform duration-300" />
-                  </div>
-                ) : (
-                  <div className="h-24 rounded-lg bg-muted flex items-center justify-center mb-2">
-                    <ChefHat className="h-8 w-8 text-muted-foreground" />
-                  </div>
-                )}
-                <p className="font-medium text-sm leading-tight line-clamp-2">{item.name}</p>
-                <p className="text-sm text-primary font-semibold mt-1">NPR {item.price}</p>
-              </button>
-            ))}
-          </div>
-        </ScrollArea>
+        {/* Table selection */}
+        {orderType === 'dine_in' && (
+          <Select value={selectedTable} onValueChange={setSelectedTable}>
+            <SelectTrigger className="h-9 text-sm">
+              <SelectValue placeholder="Select table *" />
+            </SelectTrigger>
+            <SelectContent>
+              {tables.filter(t => t.status !== 'occupied').map(t => (
+                <SelectItem key={t.id} value={t.id}>
+                  Table {t.table_number} ({t.capacity} seats)
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        <Input
+          placeholder="Customer name (optional)"
+          value={customerName}
+          onChange={e => setCustomerName(e.target.value)}
+          className="h-9 text-sm"
+        />
       </div>
 
-      {/* Right: Order Ticket */}
-      <div className="w-80 lg:w-96 shrink-0 flex flex-col border rounded-xl bg-background">
-        <div className="p-4 border-b space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold flex items-center gap-2">
-              <ShoppingCart className="h-4 w-4" /> New Order
-            </h2>
-            {cart.length > 0 && (
-              <button onClick={() => setCart([])} className="text-muted-foreground hover:text-destructive transition-colors">
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-
-          {/* Order Type */}
-          <div className="flex gap-2">
-            {(['dine_in', 'takeaway'] as const).map(type => (
-              <button
-                key={type}
-                onClick={() => setOrderType(type)}
-                className={`flex-1 py-1.5 text-xs rounded-lg border font-medium transition-colors capitalize ${orderType === type ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:border-foreground'}`}
-              >
-                {type.replace('_', ' ')}
-              </button>
-            ))}
-          </div>
-
-          {/* Table selection */}
-          {orderType === 'dine_in' && (
-            <Select value={selectedTable} onValueChange={setSelectedTable}>
-              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select table *" /></SelectTrigger>
-              <SelectContent>
-                {tables.filter(t => t.status !== 'occupied').map(t => (
-                  <SelectItem key={t.id} value={t.id}>Table {t.table_number} ({t.capacity} seats)</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-
-          {/* Customer name */}
-          <Input
-            placeholder="Customer name (optional)"
-            value={customerName}
-            onChange={e => setCustomerName(e.target.value)}
-            className="h-8 text-xs"
-          />
-        </div>
-
-        {/* Cart Items */}
-        <ScrollArea className="flex-1 p-4">
+      {/* Cart items */}
+      <ScrollArea className="flex-1">
+        <div className="p-4">
           {cart.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-muted-foreground py-12 text-center">
-              <ShoppingCart className="h-10 w-10 opacity-20 mb-2" />
-              <p className="text-sm">Add items from the menu</p>
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground text-center">
+              <ShoppingCart className="h-12 w-12 opacity-15 mb-3" />
+              <p className="text-sm font-medium">Cart is empty</p>
+              <p className="text-xs mt-1">Tap items from the menu to add</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {cart.map(item => (
-                <div key={item.menuItemId} className="flex items-center gap-2">
+                <div key={item.menuItemId} className="flex items-center gap-3 py-2 border-b border-border/50 last:border-0">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{item.name}</p>
-                    <p className="text-xs text-muted-foreground">NPR {item.price}</p>
+                    <p className="text-sm font-medium leading-tight truncate">{item.name}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">NPR {item.price.toFixed(0)} each</p>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <button
                       onClick={() => updateQty(item.menuItemId, -1)}
-                      className="h-6 w-6 rounded-full border flex items-center justify-center hover:bg-muted transition-colors"
+                      className="h-7 w-7 rounded-full border border-border flex items-center justify-center hover:bg-muted hover:border-foreground/30 transition-all"
                     >
                       <Minus className="h-3 w-3" />
                     </button>
-                    <span className="text-xs w-5 text-center font-semibold">{item.quantity}</span>
+                    <span className="text-sm w-6 text-center font-bold">{item.quantity}</span>
                     <button
                       onClick={() => updateQty(item.menuItemId, 1)}
-                      className="h-6 w-6 rounded-full border flex items-center justify-center hover:bg-muted transition-colors"
+                      className="h-7 w-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 transition-all"
                     >
                       <Plus className="h-3 w-3" />
                     </button>
                   </div>
-                  <p className="text-sm font-semibold w-16 text-right shrink-0">NPR {item.price * item.quantity}</p>
+                  <p className="text-sm font-bold w-16 text-right shrink-0 text-primary">
+                    {(item.price * item.quantity).toFixed(0)}
+                  </p>
                 </div>
               ))}
             </div>
           )}
-        </ScrollArea>
+        </div>
+      </ScrollArea>
 
-        {/* Totals & Checkout */}
-        {cart.length > 0 && (
-          <div className="p-4 border-t space-y-3 bg-muted/20">
-            {/* Discount */}
-            <div className="flex items-center gap-2">
-              <Select value={discountType} onValueChange={(v: any) => setDiscountType(v)}>
-                <SelectTrigger className="w-24 h-8 text-xs bg-background"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="percent">Percent %</SelectItem>
-                  <SelectItem value="fixed">Fixed</SelectItem>
-                </SelectContent>
-              </Select>
-              <Input 
-                type="number" 
-                placeholder="Discount" 
-                value={discountValue} 
-                onChange={e => setDiscountValue(e.target.value)}
-                className="h-8 text-xs bg-background"
-              />
-            </div>
+      {/* Totals & checkout */}
+      {cart.length > 0 && (
+        <div className="p-4 border-t bg-muted/30 space-y-3 shrink-0">
+          {/* Discount row */}
+          <div className="flex items-center gap-2">
+            <Select value={discountType} onValueChange={(v: any) => setDiscountType(v)}>
+              <SelectTrigger className="w-28 h-8 text-xs bg-background">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="percent">% Discount</SelectItem>
+                <SelectItem value="fixed">Fixed (NPR)</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input
+              type="number"
+              placeholder="Amount"
+              value={discountValue}
+              onChange={e => setDiscountValue(e.target.value)}
+              className="h-8 text-xs bg-background flex-1"
+            />
+          </div>
 
-            <div className="space-y-1 text-sm">
-              <div className="flex justify-between text-muted-foreground">
-                <span>Subtotal</span><span>NPR {subtotal.toFixed(2)}</span>
-              </div>
-              {discountAmount > 0 && (
-                <div className="flex justify-between text-destructive">
-                  <span>Discount</span><span>- NPR {discountAmount.toFixed(2)}</span>
-                </div>
-              )}
-              <div className="flex justify-between text-muted-foreground">
-                <span>VAT ({taxRate}%)</span><span>NPR {tax.toFixed(2)}</span>
-              </div>
-              {serviceCharge > 0 && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Service Chg ({serviceChargeRate}%)</span><span>NPR {serviceCharge.toFixed(2)}</span>
-                </div>
-              )}
-              <Separator className="my-2" />
-              <div className="flex justify-between font-bold text-lg text-primary">
-                <span>Total</span><span>NPR {total.toFixed(2)}</span>
-              </div>
+          {/* Price breakdown */}
+          <div className="space-y-1 text-sm">
+            <div className="flex justify-between text-muted-foreground">
+              <span>Subtotal</span>
+              <span>NPR {subtotal.toFixed(0)}</span>
             </div>
-            <Button className="w-full h-12 text-base" onClick={handlePlaceOrder} disabled={isPending}>
-              <CreditCard className="mr-2 h-5 w-5" />
-              {isPending ? 'Placing Order...' : 'Pay Now'}
-            </Button>
+            {discountAmount > 0 && (
+              <div className="flex justify-between text-emerald-600 font-medium">
+                <span>Discount {discountType === 'percent' ? `(${dVal}%)` : ''}</span>
+                <span>− NPR {discountAmount.toFixed(0)}</span>
+              </div>
+            )}
+            {taxRate > 0 && (
+              <div className="flex justify-between text-muted-foreground">
+                <span>VAT ({taxRate}%)</span>
+                <span>NPR {tax.toFixed(0)}</span>
+              </div>
+            )}
+            {serviceCharge > 0 && (
+              <div className="flex justify-between text-muted-foreground">
+                <span>Service ({serviceChargeRate}%)</span>
+                <span>NPR {serviceCharge.toFixed(0)}</span>
+              </div>
+            )}
+            <Separator className="my-2" />
+            <div className="flex justify-between font-bold text-lg text-primary">
+              <span>Total</span>
+              <span>NPR {total.toFixed(0)}</span>
+            </div>
+          </div>
+
+          <Button
+            className="w-full h-12 text-base font-semibold"
+            onClick={handlePlaceOrder}
+            disabled={isPending}
+          >
+            <CreditCard className="mr-2 h-5 w-5" />
+            {isPending ? 'Placing Order...' : `Pay NPR ${total.toFixed(0)}`}
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+
+  // ── Shared: Menu Panel content ─────────────────────────────────────────────
+  const MenuPanel = (
+    <div className="flex flex-col h-full gap-3">
+      {/* Search */}
+      <div className="relative shrink-0">
+        <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search menu items..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="pl-9 h-10"
+        />
+      </div>
+
+      {/* Category pills */}
+      <div className="flex gap-2 overflow-x-auto pb-1 shrink-0 hide-scrollbar">
+        <button
+          onClick={() => setSelectedCategory('all')}
+          className={cn(
+            'px-3.5 py-1.5 rounded-full text-xs font-semibold border whitespace-nowrap transition-all',
+            selectedCategory === 'all'
+              ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+              : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground bg-background'
+          )}
+        >
+          All Items
+        </button>
+        {categories.map(cat => (
+          <button
+            key={cat.id}
+            onClick={() => setSelectedCategory(cat.id)}
+            className={cn(
+              'px-3.5 py-1.5 rounded-full text-xs font-semibold border whitespace-nowrap transition-all',
+              selectedCategory === cat.id
+                ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground bg-background'
+            )}
+          >
+            {cat.name}
+          </button>
+        ))}
+      </div>
+
+      {/* Item grid */}
+      <ScrollArea className="flex-1 -mx-1">
+        {filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+            <UtensilsCrossed className="h-10 w-10 opacity-20 mb-3" />
+            <p className="text-sm">No items found</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 px-1">
+            {filtered.map(item => {
+              const inCart = cart.find(c => c.menuItemId === item.id)
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => addToCart(item)}
+                  className={cn(
+                    'group relative border rounded-xl p-3 text-left transition-all bg-background hover:shadow-md active:scale-[0.97]',
+                    inCart
+                      ? 'border-primary ring-1 ring-primary/30 bg-primary/5'
+                      : 'border-border hover:border-primary/50'
+                  )}
+                >
+                  {inCart && (
+                    <span className="absolute top-2 right-2 bg-primary text-primary-foreground text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                      {inCart.quantity}
+                    </span>
+                  )}
+                  {item.image_url ? (
+                    <div className="relative h-20 rounded-lg overflow-hidden mb-2 bg-muted">
+                      <Image
+                        src={item.image_url}
+                        alt={item.name}
+                        fill
+                        className="object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    </div>
+                  ) : (
+                    <div className="h-20 rounded-lg bg-muted/60 flex items-center justify-center mb-2">
+                      <ChefHat className="h-7 w-7 text-muted-foreground/50" />
+                    </div>
+                  )}
+                  <p className="font-medium text-xs leading-tight line-clamp-2 mb-1">{item.name}</p>
+                  <p className="text-sm font-bold text-primary">NPR {item.price}</p>
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </ScrollArea>
+    </div>
+  )
+
+  return (
+    <>
+      {/* ── DESKTOP LAYOUT (md+) ────────────────────────────────────────────── */}
+      <div className="hidden md:flex h-[calc(100vh-7rem)] gap-4">
+        {/* Menu - left */}
+        <div className="flex-1 min-w-0 flex flex-col gap-3">
+          {MenuPanel}
+        </div>
+        {/* Order ticket - right */}
+        <div className="w-80 lg:w-96 shrink-0 flex flex-col">
+          {OrderPanel}
+        </div>
+      </div>
+
+      {/* ── MOBILE LAYOUT (< md) ────────────────────────────────────────────── */}
+      <div className="md:hidden flex flex-col h-[calc(100vh-7rem)]">
+        {/* Tab switcher */}
+        <div className="grid grid-cols-2 gap-1 p-1 bg-muted rounded-xl mb-3 shrink-0">
+          <button
+            onClick={() => setMobileTab('menu')}
+            className={cn(
+              'flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all',
+              mobileTab === 'menu'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <UtensilsCrossed className="h-4 w-4" />
+            Menu
+          </button>
+          <button
+            onClick={() => setMobileTab('cart')}
+            className={cn(
+              'flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all relative',
+              mobileTab === 'cart'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <ShoppingCart className="h-4 w-4" />
+            Order
+            {cartCount > 0 && (
+              <span className="absolute top-1.5 right-6 bg-primary text-primary-foreground text-[10px] font-bold min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1">
+                {cartCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Tab content */}
+        <div className="flex-1 overflow-hidden">
+          {mobileTab === 'menu' ? MenuPanel : OrderPanel}
+        </div>
+
+        {/* Mobile sticky bottom CTA when on menu tab and cart has items */}
+        {mobileTab === 'menu' && cartCount > 0 && (
+          <div className="shrink-0 pt-3 pb-2">
+            <button
+              onClick={() => setMobileTab('cart')}
+              className="w-full h-12 bg-primary text-primary-foreground rounded-xl font-semibold text-sm flex items-center justify-between px-4 shadow-lg"
+            >
+              <span className="bg-primary-foreground/20 text-primary-foreground text-xs font-bold min-w-[24px] h-6 rounded-full flex items-center justify-center px-1.5">
+                {cartCount}
+              </span>
+              <span>View Order</span>
+              <span className="font-bold">NPR {total.toFixed(0)}</span>
+            </button>
           </div>
         )}
       </div>
 
-      {/* Payment Dialog */}
+      {/* ── Payment Dialog ─────────────────────────────────────────────────── */}
       <Dialog open={isPaymentOpen} onOpenChange={setIsPaymentOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Complete Payment</DialogTitle></DialogHeader>
-          <div className="space-y-6">
-            <div className="bg-muted rounded-xl p-6 text-center">
-              <p className="text-4xl font-bold text-primary">NPR {total.toFixed(2)}</p>
+        <DialogContent className="sm:max-w-md w-[calc(100%-2rem)] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg">Complete Payment</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-5">
+            <div className="bg-primary/10 rounded-xl p-5 text-center">
+              <p className="text-4xl font-bold text-primary">NPR {total.toFixed(0)}</p>
               <p className="text-sm text-muted-foreground mt-1">Total Amount Due</p>
             </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2 col-span-2">
-                <Label>Amount Paid</Label>
-                <Input 
-                  type="number" 
-                  value={amountPaid} 
-                  onChange={e => setAmountPaid(e.target.value)} 
-                  className="h-12 text-lg text-center font-semibold"
-                />
-              </div>
-              <div className="space-y-2 col-span-2">
-                <Label>Payment Method</Label>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Payment Method</Label>
                 <div className="grid grid-cols-2 gap-2">
                   {['cash', 'card', 'esewa', 'khalti'].map(method => (
                     <button
                       key={method}
                       onClick={() => setPaymentMethod(method)}
-                      className={`py-3 rounded-lg border text-sm font-medium capitalize transition-colors ${paymentMethod === method ? 'bg-primary text-primary-foreground border-primary shadow-sm' : 'border-border hover:border-foreground bg-background'}`}
+                      className={cn(
+                        'py-3 rounded-xl border text-sm font-semibold capitalize transition-all',
+                        paymentMethod === method
+                          ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                          : 'border-border hover:border-primary/50 bg-background'
+                      )}
                     >
-                      {method}
+                      {method === 'esewa' ? 'eSewa' : method === 'khalti' ? 'Khalti' : method.charAt(0).toUpperCase() + method.slice(1)}
                     </button>
                   ))}
                 </div>
               </div>
 
-              <div className="space-y-2 col-span-2 border-t pt-4 mt-2">
-                <Label className="flex items-center gap-2"><Split className="h-4 w-4"/> Split Bill?</Label>
-                <div className="flex items-center gap-4">
-                  <Input 
-                    type="number" 
-                    min={1} 
-                    max={20}
-                    value={splitBy} 
-                    onChange={e => setSplitBy(parseInt(e.target.value) || 1)} 
-                  />
-                  {splitBy > 1 && (
-                    <span className="text-sm font-medium shrink-0">
-                      NPR {(total / splitBy).toFixed(2)} each
-                    </span>
-                  )}
-                </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Amount Tendered</Label>
+                <Input
+                  type="number"
+                  value={amountPaid}
+                  onChange={e => setAmountPaid(e.target.value)}
+                  className="h-12 text-xl text-center font-bold"
+                />
+                {parseFloat(amountPaid) > total && (
+                  <p className="text-sm text-center text-emerald-600 font-medium">
+                    Change: NPR {(parseFloat(amountPaid) - total).toFixed(0)}
+                  </p>
+                )}
               </div>
 
+              <div className="space-y-2 border-t pt-3">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <Split className="h-3.5 w-3.5" /> Split Bill
+                </Label>
+                <div className="flex items-center gap-3">
+                  <Input
+                    type="number"
+                    min={1} max={20}
+                    value={splitBy}
+                    onChange={e => setSplitBy(parseInt(e.target.value) || 1)}
+                    className="h-9 w-24 text-center"
+                  />
+                  <span className="text-sm font-medium text-muted-foreground">
+                    {splitBy > 1 ? `NPR ${(total / splitBy).toFixed(0)} per person` : 'persons'}
+                  </span>
+                </div>
+              </div>
             </div>
-            
-            <DialogFooter className="sm:justify-end">
-              <Button className="w-full sm:w-auto" size="lg" onClick={handlePayment} disabled={isPending}>
-                {isPending ? 'Processing...' : `Confirm Payment`}
-              </Button>
-            </DialogFooter>
           </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsPaymentOpen(false)} className="flex-1 sm:flex-none">
+              Cancel
+            </Button>
+            <Button className="flex-1 sm:flex-none h-11" onClick={handlePayment} disabled={isPending}>
+              {isPending ? 'Processing...' : 'Confirm Payment'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Printable Receipt Dialog */}
-      <Dialog open={isReceiptOpen} onOpenChange={(open) => {
-        if (!open) resetPOS()
-      }}>
-        <DialogContent className="sm:max-w-sm" showCloseButton={false}>
-          <div className="print-content" id="printable-receipt">
-            <div className="text-center space-y-1 mb-6">
-              <h1 className="text-2xl font-bold tracking-tight">Khukuri Restaurant</h1>
-              <p className="text-sm text-muted-foreground">Kathmandu, Nepal</p>
-              <p className="text-sm text-muted-foreground">PAN: 123456789</p>
-            </div>
-            
-            <div className="text-sm space-y-1 mb-6 border-b pb-4 border-dashed border-gray-300">
-              <div className="flex justify-between"><span>Order:</span> <span>#{completedOrder?.order_number}</span></div>
-              <div className="flex justify-between"><span>Date:</span> <span>{new Date().toLocaleString()}</span></div>
-              <div className="flex justify-between"><span>Method:</span> <span className="capitalize">{paymentMethod}</span></div>
+      {/* ── Receipt Dialog ─────────────────────────────────────────────────── */}
+      <Dialog open={isReceiptOpen} onOpenChange={(open) => { if (!open) resetPOS() }}>
+        <DialogContent className="sm:max-w-sm w-[calc(100%-2rem)] rounded-2xl max-h-[90vh] overflow-y-auto">
+          <div id="printable-receipt" className="font-mono">
+            <div className="text-center space-y-0.5 mb-5">
+              <h1 className="text-xl font-bold">Khukuri Restaurant & Resort</h1>
+              <p className="text-xs text-muted-foreground">Hetauda, Makwanpur, Nepal</p>
+              <p className="text-xs text-muted-foreground">Tel: +977 985-5073719</p>
             </div>
 
-            <div className="space-y-3 mb-6">
-              <div className="flex justify-between text-xs font-semibold uppercase border-b border-gray-200 pb-1">
-                <span>Item</span>
-                <span>Total</span>
+            <div className="text-xs space-y-1 mb-4 border-y border-dashed py-3">
+              <div className="flex justify-between"><span>Bill No:</span><span className="font-bold">#{completedOrder?.order_number}</span></div>
+              <div className="flex justify-between"><span>Date:</span><span>{new Date().toLocaleString('en-NP', { dateStyle: 'medium', timeStyle: 'short' })}</span></div>
+              <div className="flex justify-between"><span>Type:</span><span className="capitalize">{orderType.replace('_', '-')}</span></div>
+              <div className="flex justify-between"><span>Payment:</span><span className="capitalize font-semibold">{paymentMethod}</span></div>
+            </div>
+
+            <div className="space-y-1.5 mb-4">
+              <div className="flex justify-between text-[10px] font-bold uppercase text-muted-foreground border-b pb-1">
+                <span>Item</span><span>Total</span>
               </div>
               {completedOrder?.items?.map((item: any, i: number) => (
-                <div key={i} className="flex justify-between text-sm">
-                  <span>{item.quantity}x {item.name}</span>
-                  <span>{item.price * item.quantity}</span>
+                <div key={i} className="flex justify-between text-xs">
+                  <span>{item.quantity}× {item.name}</span>
+                  <span>NPR {(item.price * item.quantity).toFixed(0)}</span>
                 </div>
               ))}
             </div>
 
-            <div className="space-y-1 text-sm border-t border-dashed border-gray-300 pt-4 mb-8">
+            <div className="text-xs space-y-1 border-t border-dashed pt-3 mb-6">
               <div className="flex justify-between text-muted-foreground">
-                <span>Subtotal</span><span>{completedOrder?.subtotal.toFixed(2)}</span>
+                <span>Subtotal</span><span>NPR {completedOrder?.subtotal?.toFixed(0)}</span>
               </div>
               {completedOrder?.discountAmount > 0 && (
-                <div className="flex justify-between">
-                  <span>Discount</span><span>-{completedOrder?.discountAmount.toFixed(2)}</span>
+                <div className="flex justify-between text-emerald-600">
+                  <span>Discount</span><span>− NPR {completedOrder?.discountAmount?.toFixed(0)}</span>
                 </div>
               )}
-              <div className="flex justify-between text-muted-foreground">
-                <span>VAT ({taxRate}%)</span><span>{completedOrder?.tax.toFixed(2)}</span>
-              </div>
-              {completedOrder?.serviceCharge > 0 && (
+              {taxRate > 0 && (
                 <div className="flex justify-between text-muted-foreground">
-                  <span>Service Charge</span><span>{completedOrder?.serviceCharge.toFixed(2)}</span>
+                  <span>VAT ({taxRate}%)</span><span>NPR {completedOrder?.tax?.toFixed(0)}</span>
                 </div>
               )}
-              <div className="flex justify-between font-bold text-lg pt-2 mt-2 border-t border-gray-200">
-                <span>Total</span><span>NPR {completedOrder?.total.toFixed(2)}</span>
+              <div className="flex justify-between font-bold text-base border-t pt-2 mt-1">
+                <span>TOTAL</span><span>NPR {completedOrder?.total?.toFixed(0)}</span>
               </div>
             </div>
 
-            <div className="text-center text-sm text-muted-foreground mb-4">
-              <p>Thank you for dining with us!</p>
-              <p>Please visit again.</p>
-            </div>
+            <p className="text-center text-xs text-muted-foreground">Thank you for visiting Khukuri Resort!</p>
           </div>
-          
-          <DialogFooter className="flex-col sm:flex-row gap-2 sm:space-x-0 mt-4">
-            <Button variant="outline" className="w-full" onClick={resetPOS}>
-              Close & New Order
+
+          <DialogFooter className="flex-col sm:flex-row gap-2 mt-4">
+            <Button variant="outline" className="flex-1" onClick={resetPOS}>
+              New Order
             </Button>
-            <Button 
-              className="w-full" 
+            <Button
+              className="flex-1"
               onClick={() => {
-                const printContent = document.getElementById('printable-receipt');
-                const originalContents = document.body.innerHTML;
-                if (printContent) {
-                  document.body.innerHTML = printContent.innerHTML;
-                  window.print();
-                  document.body.innerHTML = originalContents;
-                  window.location.reload(); // Reload to restore React state bindings
+                const el = document.getElementById('printable-receipt')
+                if (el) {
+                  const w = window.open('', '_blank', 'width=400,height=600')
+                  if (w) {
+                    w.document.write(`<html><head><title>Receipt</title><style>body{font-family:monospace;padding:16px;font-size:12px}*{margin:0;padding:0;box-sizing:border-box}.flex{display:flex}.justify-between{justify-content:space-between}.font-bold{font-weight:bold}</style></head><body>${el.innerHTML}</body></html>`)
+                    w.document.close()
+                    w.print()
+                  }
                 }
               }}
             >
@@ -517,6 +665,6 @@ export default function POSClient({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   )
 }
