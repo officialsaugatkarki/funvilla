@@ -47,11 +47,6 @@ export function Gallery() {
         ))}
       </div>
 
-      <div className="mt-8 text-center">
-        <button className="h-10 inline-flex items-center justify-center rounded-full border border-primary px-7 text-xs font-semibold uppercase tracking-wider text-primary transition-all hover:bg-primary hover:text-white">
-          View Full Gallery
-        </button>
-      </div>
     </section>
   )
 }

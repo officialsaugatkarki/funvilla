@@ -47,7 +47,7 @@ export async function createPublicRoomBooking(input: {
 
   const roomRate = roomType?.base_price ?? 1200
   const subtotal = roomRate * nights
-  const taxAmount = Math.round(subtotal * 0.13 * 100) / 100
+  const taxAmount = 0 // Tax: 0% (configured per business)
   const total = subtotal + taxAmount
 
   const { data, error } = await supabase
@@ -67,7 +67,7 @@ export async function createPublicRoomBooking(input: {
       total,
       deposit_amount: 0,
       status: 'pending',
-      payment_status: 'pending',
+      payment_status: 'unpaid',
       source: 'online',
     })
     .select()

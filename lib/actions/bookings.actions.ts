@@ -106,7 +106,7 @@ export async function createBooking(input: RoomBookingInput): Promise<ApiRespons
   const checkOut = new Date(result.data.check_out_date)
   const nights = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24))
   const subtotal = roomType.base_price * nights
-  const taxAmount = Math.round(subtotal * 0.13 * 100) / 100
+  const taxAmount = 0 // Tax: 0% per business configuration
 
   const { data, error } = await supabase
     .from('room_bookings')
