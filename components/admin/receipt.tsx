@@ -11,7 +11,7 @@ export function Receipt({ order, paymentMethod, taxRate, serviceChargeRate = 0 }
   if (!order) return null
 
   const s = {
-    root: { fontFamily: '"Arial", "Helvetica", sans-serif', fontSize: '12px', fontWeight: '500', lineHeight: '1.2', color: '#000000', background: '#FFFFFF', padding: '0', width: '190px', boxSizing: 'border-box' as const, margin: '0' },
+    root: { fontFamily: '"Arial", "Helvetica", sans-serif', fontSize: '13px', fontWeight: '500', lineHeight: '1.2', color: '#000000', background: '#FFFFFF', padding: '0 4px', width: '100%', maxWidth: '300px', boxSizing: 'border-box' as const, margin: '0' },
     center: { textAlign: 'center' as const },
     right: { textAlign: 'right' as const },
     left: { textAlign: 'left' as const },
@@ -21,10 +21,10 @@ export function Receipt({ order, paymentMethod, taxRate, serviceChargeRate = 0 }
     flexBetween: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' },
     divider: { borderTop: '1px dashed #000000', margin: '8px 0' },
     thickDivider: { borderTop: '2px solid #000000', margin: '12px 0 4px 0' },
-    wLabel: { width: '60px', flexShrink: 0 },
-    wQty: { width: '20px', flexShrink: 0 },
-    wTotal: { width: '50px', flexShrink: 0, textAlign: 'right' as const },
-    flex1: { flex: 1, padding: '0 2px', wordBreak: 'break-word' as const },
+    wLabel: { width: '35%', flexShrink: 0 },
+    wQty: { width: '12%', flexShrink: 0 },
+    wTotal: { width: '25%', flexShrink: 0, textAlign: 'right' as const },
+    flex1: { flex: 1, padding: '0 4px', wordBreak: 'break-word' as const },
     h1: { fontSize: '16px', margin: '0 0 4px 0' },
     h2: { fontSize: '14px', margin: '0 0 6px 0' },
     p0: { margin: '0 0 4px 0', fontSize: '11px' }

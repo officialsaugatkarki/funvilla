@@ -228,7 +228,7 @@ export default function POSClient({
         </div>
       </div>
       
-      <ScrollArea className="flex-1">
+      <div className="flex-1 overflow-y-auto min-h-0">
         <div className="p-3">
           {activeOrders.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
@@ -278,7 +278,7 @@ export default function POSClient({
             </div>
           )}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   )
 
@@ -351,7 +351,7 @@ export default function POSClient({
       </div>
 
       {/* Cart items */}
-      <ScrollArea className="flex-1">
+      <div className="flex-1 overflow-y-auto min-h-0">
         <div className="p-4">
           {cart.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground text-center">
@@ -390,7 +390,7 @@ export default function POSClient({
             </div>
           )}
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Totals & checkout */}
       {cart.length > 0 && (
@@ -564,7 +564,7 @@ export default function POSClient({
           {MenuPanel}
         </div>
         {/* Order ticket - right */}
-        <div className="w-80 lg:w-96 shrink-0 flex flex-col">
+        <div className="w-80 lg:w-96 shrink-0 flex flex-col min-h-0">
           {RightPanel}
         </div>
       </div>
