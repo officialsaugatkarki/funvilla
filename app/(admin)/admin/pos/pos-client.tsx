@@ -18,7 +18,7 @@ import Image from 'next/image'
 import { createOrder, processPayment, getActiveOrdersForPOS } from '@/lib/actions/orders.actions'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
-import { buildReceiptHtml, downloadReceiptHtml } from '@/components/admin/receipt'
+import { buildReceiptHtml, downloadReceiptImage } from '@/components/admin/receipt'
 
 interface CartItem {
   menuItemId: string
@@ -734,7 +734,7 @@ export default function POSClient({
               variant="secondary"
               className="px-3"
               onClick={() => {
-                downloadReceiptHtml(completedOrder, paymentMethod, taxRate, serviceChargeRate)
+                downloadReceiptImage(completedOrder, paymentMethod, taxRate, serviceChargeRate)
               }}
               title="Download Receipt (For mobile/manual printing)"
             >

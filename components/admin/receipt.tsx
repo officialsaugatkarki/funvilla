@@ -15,7 +15,7 @@ export function Receipt(_props: ReceiptProps) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers for fixed-width monospace text layout (32 chars wide)
 // ─────────────────────────────────────────────────────────────────────────────
-const W = 32 // characters per line for 58mm paper
+const W = 31 // Reduced slightly to ensure it fits 58mm printers
 
 function center(text: string): string {
   const t = text.slice(0, W)
@@ -26,12 +26,11 @@ function center(text: string): string {
 function row(label: string, value: string): string {
   const maxLabel = 10
   const l = label.slice(0, maxLabel).padEnd(maxLabel)
-  const v = value.slice(0, W - maxLabel - 2)
+  const v = value.slice(0, W - maxLabel - 2).padStart(W - maxLabel - 2)
   return `${l}: ${v}`
 }
 
 function itemRow(name: string, total: string): string {
-  // e.g. "1x Plain Lassi             120"
   const maxName = W - total.length - 1
   const n = name.length > maxName ? name.slice(0, maxName - 1) + '-' : name.padEnd(maxName)
   return `${n} ${total}`
@@ -41,17 +40,7 @@ function divider(char = '-'): string {
   return char.repeat(W)
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Build a complete printable HTML page
-// ─────────────────────────────────────────────────────────────────────────────
-export function buildReceiptHtml(
-  order: any,
-  paymentMethod: string,
-  taxRate: number,
-  serviceChargeRate: number = 0
-): string {
-  if (!order) return ''
-
+function buildReceiptLines(order: any, paymentMethod: string, taxRate: number, serviceChargeRate: number): string[] {
   const fmt = (n: number | string) => Math.round(Number(n) || 0).toString()
   const date = new Date(order.created_at || Date.now())
   const dateStr = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -64,7 +53,7 @@ export function buildReceiptHtml(
   const total     = Number(order.total || 0)
   const items: any[] = order.items || []
 
-  const lines: string[] = [
+  return [
     '',
     center('KHUKURI RESTAURANT'),
     center('& BAR FUN VILLA'),
@@ -78,7 +67,6 @@ export function buildReceiptHtml(
     row('Type', orderType),
     row('Payment', paymentMethod),
     divider('-'),
-    '',
     itemRow('Item', 'Total'),
     divider('-'),
     ...items.map((item: any) => {
@@ -87,7 +75,6 @@ export function buildReceiptHtml(
       return itemRow(name, price)
     }),
     divider('-'),
-    '',
     row('Subtotal', 'NPR ' + fmt(subtotal)),
     ...(discount > 0 ? [row('Discount', '-NPR ' + fmt(discount))] : []),
     ...(taxRate > 0 && tax > 0 ? [row('VAT ' + taxRate + '%', 'NPR ' + fmt(tax))] : []),
@@ -100,7 +87,19 @@ export function buildReceiptHtml(
     center('Please visit us again'),
     '',
   ]
+}
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Build a complete printable HTML page
+// ─────────────────────────────────────────────────────────────────────────────
+export function buildReceiptHtml(
+  order: any,
+  paymentMethod: string,
+  taxRate: number,
+  serviceChargeRate: number = 0
+): string {
+  if (!order) return ''
+  const lines = buildReceiptLines(order, paymentMethod, taxRate, serviceChargeRate)
   const text = lines.join('\n')
 
   return `<!DOCTYPE html>
@@ -111,7 +110,7 @@ export function buildReceiptHtml(
   <style>
     @page {
       size: 58mm auto;
-      margin: 3mm 2mm;
+      margin: 1mm 2mm;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
@@ -123,8 +122,8 @@ export function buildReceiptHtml(
     }
     pre {
       font-family: "Courier New", "Courier", monospace;
-      font-size: 10pt;
-      font-weight: 600;
+      font-size: 10px; /* Reduced to ensure it fits 58mm roll */
+      font-weight: bold;
       line-height: 1.35;
       white-space: pre;
       word-break: normal;
@@ -146,23 +145,49 @@ export function buildReceiptHtml(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Download receipt as an HTML file (for mobile users without direct printer)
+// Download receipt as an Image file (for mobile users to print via Bluetooth apps)
 // ─────────────────────────────────────────────────────────────────────────────
-export function downloadReceiptHtml(
+export function downloadReceiptImage(
   order: any,
   paymentMethod: string,
   taxRate: number,
   serviceChargeRate: number = 0
 ): void {
-  const html = buildReceiptHtml(order, paymentMethod, taxRate, serviceChargeRate)
-  if (!html) return
-  const blob = new Blob([html], { type: 'text/html' })
-  const url  = URL.createObjectURL(blob)
-  const a    = document.createElement('a')
-  a.href     = url
-  a.download = `receipt-${order.order_number || 'unknown'}.html`
+  if (!order) return
+  const lines = buildReceiptLines(order, paymentMethod, taxRate, serviceChargeRate)
+  
+  // Create a canvas
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  
+  // Set dimensions (384px is typical 58mm printer width at 8 dots/mm)
+  const fontSize = 20
+  const lineHeight = 24
+  const padding = 20
+  
+  canvas.width = 384 
+  canvas.height = (lines.length * lineHeight) + (padding * 2)
+  
+  // Draw background
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  
+  // Draw text
+  ctx.fillStyle = '#000000'
+  ctx.font = \`\${fontSize}px "Courier New", Courier, monospace\`
+  ctx.textBaseline = 'top'
+  
+  lines.forEach((line, index) => {
+    ctx.fillText(line, padding, padding + (index * lineHeight))
+  })
+  
+  // Trigger download
+  const url = canvas.toDataURL('image/png')
+  const a = document.createElement('a')
+  a.href = url
+  a.download = \`receipt-\${order.order_number || 'unknown'}.png\`
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
-  URL.revokeObjectURL(url)
 }
