@@ -60,23 +60,24 @@ export function buildReceiptHtml(order: any, paymentMethod: string, taxRate: num
   <meta charset="utf-8">
   <title>Receipt</title>
   <style>
-    @page { margin: 4mm; }
+    @page {
+      size: 58mm auto;
+      margin: 2mm 3mm;
+    }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
+    html, body {
+      width: 58mm;
       font-family: "Arial", "Helvetica", sans-serif;
-      font-size: 12px;
+      font-size: 11px;
       color: #000;
       background: #fff;
-      width: 100%;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
-    .receipt {
-      width: 100%;
-    }
+    .receipt { width: 100%; }
     .center { text-align: center; }
     table { width: 100%; border-collapse: collapse; }
-    td { word-break: break-word; }
+    td { word-break: break-word; vertical-align: top; }
   </style>
 </head>
 <body>

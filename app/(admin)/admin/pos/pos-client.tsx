@@ -735,7 +735,7 @@ export default function POSClient({
               onClick={() => {
                 const html = buildReceiptHtml(completedOrder, paymentMethod, taxRate, serviceChargeRate)
                 if (!html) return
-                const printWindow = window.open('', '_blank', 'width=400,height=600')
+                const printWindow = window.open('', '_blank', 'width=220,height=700,left=0,top=0')
                 if (printWindow) {
                   printWindow.document.write(html)
                   printWindow.document.close()
