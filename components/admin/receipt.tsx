@@ -9,119 +9,141 @@ export interface ReceiptProps {
 
 export function Receipt({ order, paymentMethod, taxRate, serviceChargeRate = 0 }: ReceiptProps) {
   if (!order) return null
+  return <div id="print-root" className="hidden" data-order={JSON.stringify(order)} data-payment={paymentMethod} data-tax={taxRate} data-service={serviceChargeRate} />
+}
 
-  const s = {
-    root: { fontFamily: '"Arial", "Helvetica", sans-serif', fontSize: '13px', fontWeight: '500', lineHeight: '1.2', color: '#000000', background: '#FFFFFF', padding: '0 4px', width: '100%', maxWidth: '300px', boxSizing: 'border-box' as const, margin: '0' },
-    center: { textAlign: 'center' as const },
-    right: { textAlign: 'right' as const },
-    left: { textAlign: 'left' as const },
-    bold: { fontWeight: '800' },
-    uppercase: { textTransform: 'uppercase' as const },
-    capitalize: { textTransform: 'capitalize' as const },
-    flexBetween: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' },
-    divider: { borderTop: '1px dashed #000000', margin: '8px 0' },
-    thickDivider: { borderTop: '2px solid #000000', margin: '12px 0 4px 0' },
-    wLabel: { width: '35%', flexShrink: 0 },
-    wQty: { width: '12%', flexShrink: 0 },
-    wTotal: { width: '25%', flexShrink: 0, textAlign: 'right' as const },
-    flex1: { flex: 1, padding: '0 4px', wordBreak: 'break-word' as const },
-    h1: { fontSize: '16px', margin: '0 0 4px 0' },
-    h2: { fontSize: '14px', margin: '0 0 6px 0' },
-    p0: { margin: '0 0 4px 0', fontSize: '11px' }
+/**
+ * Generates a self-contained HTML string for thermal printing.
+ * Uses <table> layout which is the only reliable method for thermal printers.
+ */
+export function buildReceiptHtml(order: any, paymentMethod: string, taxRate: number, serviceChargeRate: number = 0): string {
+  if (!order) return ''
+
+  const fmt = (n: number) => Number(n || 0).toFixed(0)
+  const date = new Date(order.created_at || Date.now())
+  const dateStr = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+  const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+  const orderType = (order.order_type || 'dine_in').replace('_', '-')
+  const subtotal = Number(order.subtotal || 0)
+  const discount = Number(order.discountAmount || 0)
+  const tax = Number(order.tax || 0)
+  const service = Number(order.serviceCharge || 0)
+  const total = Number(order.total || 0)
+
+  const items: any[] = order.items || []
+
+  const row = (label: string, value: string, bold = false, large = false) => `
+    <tr>
+      <td style="padding:2px 0;font-weight:${bold ? '700' : '500'};font-size:${large ? '14px' : '12px'}">${label}</td>
+      <td style="padding:2px 0;text-align:right;font-weight:${bold ? '700' : '500'};font-size:${large ? '14px' : '12px'}">${value}</td>
+    </tr>`
+
+  const divider = (dashed = true) => `
+    <tr><td colspan="2" style="padding:0">
+      <div style="border-top:1px ${dashed ? 'dashed' : 'solid'} #000;margin:6px 0"></div>
+    </td></tr>`
+
+  const itemRows = items.map(item => {
+    const itemTotal = fmt(Number(item.price) * Number(item.quantity))
+    return `
+    <tr>
+      <td style="padding:2px 0;font-size:12px;vertical-align:top">
+        <span style="font-weight:600">${item.quantity}x</span> ${item.name}
+      </td>
+      <td style="padding:2px 0;text-align:right;font-size:12px;vertical-align:top;white-space:nowrap;font-weight:600">${itemTotal}</td>
+    </tr>`
+  }).join('')
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Receipt</title>
+  <style>
+    @page { margin: 4mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Arial", "Helvetica", sans-serif;
+      font-size: 12px;
+      color: #000;
+      background: #fff;
+      width: 100%;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .receipt {
+      width: 100%;
+    }
+    .center { text-align: center; }
+    table { width: 100%; border-collapse: collapse; }
+    td { word-break: break-word; }
+  </style>
+</head>
+<body>
+<div class="receipt">
+  <!-- HEADER -->
+  <div class="center" style="margin-bottom:10px">
+    <div style="font-size:16px;font-weight:800;text-transform:uppercase;letter-spacing:1px">KHUKURI RESTAURANT</div>
+    <div style="font-size:14px;font-weight:800;text-transform:uppercase">&amp; BAR FUN VILLA</div>
+    <div style="font-size:11px;margin-top:4px">Hetauda, Makwanpur, Nepal</div>
+    <div style="font-size:11px">+977-985-5073719</div>
+  </div>
+
+  <div style="border-top:1px dashed #000;margin:8px 0"></div>
+
+  <!-- ORDER INFO -->
+  <table style="margin-bottom:6px">
+    ${row('Invoice', order.order_number || '-')}
+    ${row('Date', dateStr)}
+    ${row('Time', timeStr)}
+    ${row('Type', orderType)}
+    ${row('Payment', paymentMethod)}
+  </table>
+
+  <div style="border-top:1px dashed #000;margin:8px 0"></div>
+
+  <!-- ITEMS HEADER -->
+  <table style="margin-bottom:4px">
+    <tr>
+      <td style="font-weight:700;font-size:12px;padding:2px 0">Item</td>
+      <td style="font-weight:700;font-size:12px;padding:2px 0;text-align:right">Total</td>
+    </tr>
+  </table>
+  <div style="border-top:1px dashed #000;margin:4px 0"></div>
+
+  <!-- ITEMS -->
+  <table style="margin-bottom:6px">
+    ${itemRows}
+  </table>
+
+  <div style="border-top:1px dashed #000;margin:8px 0"></div>
+
+  <!-- TOTALS -->
+  <table style="margin-bottom:6px">
+    ${row('Subtotal', 'NPR ' + fmt(subtotal))}
+    ${discount > 0 ? row('Discount', '- NPR ' + fmt(discount)) : ''}
+    ${taxRate > 0 && tax > 0 ? row('VAT (' + taxRate + '%)', 'NPR ' + fmt(tax)) : ''}
+    ${serviceChargeRate > 0 && service > 0 ? row('Service (' + serviceChargeRate + '%)', 'NPR ' + fmt(service)) : ''}
+    ${divider(false)}
+    ${row('GRAND TOTAL', 'NPR ' + fmt(total), true, true)}
+  </table>
+
+  <div style="border-top:1px dashed #000;margin:8px 0"></div>
+
+  <!-- FOOTER -->
+  <div class="center" style="margin-top:10px;margin-bottom:10px">
+    <div style="font-weight:700;font-size:12px">Thank you for visiting!</div>
+    <div style="font-size:11px;margin-top:2px">Please visit us again ❤</div>
+  </div>
+
+  <div style="border-top:2px solid #000;margin-top:8px"></div>
+</div>
+<script>
+  window.onload = function() {
+    window.print();
+    setTimeout(function() { window.close(); }, 800);
   }
-
-  return (
-    <div id="print-root" style={s.root} className="hidden">
-      <div style={{ ...s.center, marginBottom: '16px' }}>
-        <h1 style={{ ...s.h1, ...s.bold, ...s.uppercase }}>Khukuri Restaurant</h1>
-        <h2 style={{ ...s.h2, ...s.bold, ...s.uppercase }}>&amp; Bar Fun Villa</h2>
-        <p style={s.p0}>Hetauda, Makwanpur, Nepal</p>
-        <p style={s.p0}>+977-985-5073719</p>
-      </div>
-
-      <div style={s.divider}></div>
-
-      <div style={{ marginBottom: '8px' }}>
-        <div style={s.flexBetween}>
-          <span style={s.wLabel}>Invoice</span>
-          <span style={s.flex1}>: {order.order_number || '-'}</span>
-        </div>
-        <div style={s.flexBetween}>
-          <span style={s.wLabel}>Date</span>
-          <span style={s.flex1}>: {new Date(order.created_at || Date.now()).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-        </div>
-        <div style={s.flexBetween}>
-          <span style={s.wLabel}>Time</span>
-          <span style={s.flex1}>: {new Date(order.created_at || Date.now()).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
-        </div>
-        <div style={s.flexBetween}>
-          <span style={s.wLabel}>Type</span>
-          <span style={{ ...s.flex1, ...s.capitalize }}>: {order.order_type?.replace('_', '-') || 'Dine-in'}</span>
-        </div>
-        <div style={s.flexBetween}>
-          <span style={s.wLabel}>Payment</span>
-          <span style={{ ...s.flex1, ...s.capitalize }}>: {paymentMethod}</span>
-        </div>
-      </div>
-
-      <div style={s.divider}></div>
-
-      <div style={{ marginBottom: '8px' }}>
-        <div style={{ ...s.flexBetween, ...s.bold }}>
-          <span style={s.wQty}>Qty</span>
-          <span style={{ ...s.flex1, ...s.left }}>Item</span>
-          <span style={s.wTotal}>Total</span>
-        </div>
-        <div style={s.divider}></div>
-        {order.items?.map((item: any, i: number) => (
-          <div key={i} style={s.flexBetween}>
-            <span style={s.wQty}>{item.quantity}</span>
-            <span style={{ ...s.flex1, ...s.left }}>{item.name}</span>
-            <span style={s.wTotal}>{Number(item.price * item.quantity).toFixed(0)}</span>
-          </div>
-        ))}
-      </div>
-
-      <div style={s.divider}></div>
-
-      <div style={{ marginBottom: '16px' }}>
-        <div style={s.flexBetween}>
-          <span>Subtotal</span>
-          <span>NPR {Number(order.subtotal || 0).toFixed(0)}</span>
-        </div>
-        {Number(order.discountAmount || 0) > 0 && (
-          <div style={s.flexBetween}>
-            <span>Discount</span>
-            <span>- NPR {Number(order.discountAmount).toFixed(0)}</span>
-          </div>
-        )}
-        {taxRate > 0 && (
-          <div style={s.flexBetween}>
-            <span>VAT ({taxRate}%)</span>
-            <span>NPR {Number(order.tax || 0).toFixed(0)}</span>
-          </div>
-        )}
-        {serviceChargeRate > 0 && Number(order.serviceCharge || 0) > 0 && (
-          <div style={s.flexBetween}>
-            <span>Service ({serviceChargeRate}%)</span>
-            <span>NPR {Number(order.serviceCharge).toFixed(0)}</span>
-          </div>
-        )}
-        <div style={{ ...s.divider, marginTop: '4px', marginBottom: '4px' }}></div>
-        <div style={{ ...s.flexBetween, ...s.bold, fontSize: '13px' }}>
-          <span>GRAND TOTAL</span>
-          <span>NPR {Number(order.total || 0).toFixed(0)}</span>
-        </div>
-      </div>
-
-      <div style={s.divider}></div>
-
-      <div style={{ ...s.center, marginTop: '16px', marginBottom: '8px' }}>
-        <p style={{ ...s.bold, margin: '0 0 2px 0' }}>Thank you for visiting!</p>
-        <p style={{ margin: 0 }}>Please visit us again ❤️</p>
-      </div>
-      
-      <div style={s.thickDivider}></div>
-    </div>
-  )
+</script>
+</body>
+</html>`
 }

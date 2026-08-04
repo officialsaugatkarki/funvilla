@@ -18,7 +18,7 @@ import Image from 'next/image'
 import { createOrder, processPayment, getActiveOrdersForPOS } from '@/lib/actions/orders.actions'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
-import { Receipt as ReceiptComponent } from '@/components/admin/receipt'
+import { buildReceiptHtml } from '@/components/admin/receipt'
 
 interface CartItem {
   menuItemId: string
@@ -733,33 +733,11 @@ export default function POSClient({
             <Button
               className="flex-1"
               onClick={() => {
-                const receiptHtml = document.getElementById('print-root')?.outerHTML
-                if (!receiptHtml) return
-                
+                const html = buildReceiptHtml(completedOrder, paymentMethod, taxRate, serviceChargeRate)
+                if (!html) return
                 const printWindow = window.open('', '_blank', 'width=400,height=600')
                 if (printWindow) {
-                  printWindow.document.write(`
-                    <!DOCTYPE html>
-                    <html>
-                      <head>
-                        <title>Receipt</title>
-                        <style>
-                          @page { margin: 0; }
-                          * { box-sizing: border-box; }
-                          body { margin: 0; padding: 0; width: 100%; font-family: "Arial", "Helvetica", sans-serif; background: white; color: black; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                        </style>
-                      </head>
-                      <body>
-                        ${receiptHtml.replace('class="hidden"', '')}
-                        <script>
-                          window.onload = () => { 
-                            window.print();
-                            setTimeout(() => { window.close(); }, 500);
-                          }
-                        </script>
-                      </body>
-                    </html>
-                  `)
+                  printWindow.document.write(html)
                   printWindow.document.close()
                 }
               }}
@@ -770,15 +748,7 @@ export default function POSClient({
         </DialogContent>
       </Dialog>
       
-      {/* Actual Printable Receipt */}
-      {completedOrder && (
-        <ReceiptComponent 
-          order={completedOrder} 
-          paymentMethod={paymentMethod} 
-          taxRate={taxRate} 
-          serviceChargeRate={serviceChargeRate} 
-        />
-      )}
+      {/* Receipt is now generated purely in JS via buildReceiptHtml */}
     </>
   )
 }
