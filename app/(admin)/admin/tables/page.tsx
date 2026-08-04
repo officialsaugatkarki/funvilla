@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function TablesPage() {
   await requirePermission(PERMISSIONS.TABLES_READ)
-  const canAccessPOS = await checkPermission(PERMISSIONS.POS_READ)
+  const canAccessPOS = await checkPermission(PERMISSIONS.POS_ACCESS)
   const { data: tables } = await getTables()
   return <TablesClient tables={tables ?? []} canAccessPOS={canAccessPOS} />
 }
