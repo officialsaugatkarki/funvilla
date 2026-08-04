@@ -175,7 +175,7 @@ export function downloadReceiptImage(
   
   // Draw text
   ctx.fillStyle = '#000000'
-  ctx.font = \`\${fontSize}px "Courier New", Courier, monospace\`
+  ctx.font = `${fontSize}px "Courier New", Courier, monospace`
   ctx.textBaseline = 'top'
   
   lines.forEach((line, index) => {
@@ -186,7 +186,7 @@ export function downloadReceiptImage(
   const url = canvas.toDataURL('image/png')
   const a = document.createElement('a')
   a.href = url
-  a.download = \`receipt-\${order.order_number || 'unknown'}.png\`
+  a.download = `receipt-${order.order_number || 'unknown'}.png`
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
