@@ -4,7 +4,7 @@ import { useState, useTransition, useEffect } from 'react'
 import { toast } from 'sonner'
 import {
   Plus, Minus, Search, ShoppingCart, CreditCard,
-  ChefHat, X, Split, Receipt, Trash2, UtensilsCrossed, ListOrdered, CheckCircle2, Clock
+  ChefHat, X, Split, Receipt, Trash2, UtensilsCrossed, ListOrdered, CheckCircle2, Clock, Download
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,7 +18,7 @@ import Image from 'next/image'
 import { createOrder, processPayment, getActiveOrdersForPOS } from '@/lib/actions/orders.actions'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
-import { buildReceiptHtml } from '@/components/admin/receipt'
+import { buildReceiptHtml, downloadReceiptHtml } from '@/components/admin/receipt'
 
 interface CartItem {
   menuItemId: string
@@ -729,6 +729,16 @@ export default function POSClient({
           <DialogFooter className="flex-col sm:flex-row gap-2 mt-4">
             <Button variant="outline" className="flex-1" onClick={resetPOS}>
               Close & New
+            </Button>
+            <Button
+              variant="secondary"
+              className="px-3"
+              onClick={() => {
+                downloadReceiptHtml(completedOrder, paymentMethod, taxRate, serviceChargeRate)
+              }}
+              title="Download Receipt (For mobile/manual printing)"
+            >
+              <Download className="h-4 w-4" />
             </Button>
             <Button
               className="flex-1"
