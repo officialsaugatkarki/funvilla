@@ -63,6 +63,20 @@ const NAV_ITEMS = [
   { name: 'Settings',        href: '/admin/settings',         icon: Settings },
 ]
 
+// Maps each role to its home page
+const ROLE_HOME: Record<RoleName, string> = {
+  owner:              '/admin/dashboard',
+  admin:              '/admin/dashboard',
+  manager:            '/admin/dashboard',
+  reception:          '/admin/bookings',
+  cashier:            '/admin/pos',
+  kitchen:            '/admin/kitchen',
+  waiter:             '/admin/tables',
+  housekeeping:       '/admin/rooms',
+  inventory_manager:  '/admin/inventory',
+  viewer:             '/admin/dashboard',
+}
+
 function SidebarContent({
   role,
   onNavClick,
@@ -72,6 +86,7 @@ function SidebarContent({
 }) {
   const pathname = usePathname()
   const allowedPaths = ROLE_PATHS[role] || []
+  const homeHref = ROLE_HOME[role] ?? '/admin/dashboard'
 
   const visibleItems = NAV_ITEMS.filter(
     (item) => allowedPaths.includes('*') || allowedPaths.includes(item.href)
@@ -80,7 +95,7 @@ function SidebarContent({
   return (
     <>
       <div className="p-5 border-b flex items-center justify-between">
-        <Link href="/admin/dashboard" className="flex items-center gap-2" onClick={onNavClick}>
+        <Link href={homeHref} className="flex items-center gap-2" onClick={onNavClick}>
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shrink-0">
             <span className="text-primary-foreground font-bold text-lg">K</span>
           </div>
@@ -110,7 +125,7 @@ function SidebarContent({
       </nav>
       <div className="p-4 border-t">
         <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-medium">
-          Role: {role}
+          Role: {role.replace('_', ' ')}
         </p>
       </div>
     </>

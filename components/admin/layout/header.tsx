@@ -73,9 +73,11 @@ export function AdminHeader({ user }: { user: SessionUser }) {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link href="/admin/settings">Profile & Settings</Link>
-            </DropdownMenuItem>
+            {['owner','admin','manager','cashier','reception','inventory_manager','viewer'].includes(user.roleName) && (
+              <DropdownMenuItem asChild>
+                <Link href="/admin/settings">Profile & Settings</Link>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
               <form action={logout} className="w-full">

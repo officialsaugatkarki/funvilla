@@ -103,24 +103,29 @@ export async function login(data: LoginInput) {
     await supabase.from('login_attempts').delete().eq('ip_address', ip)
 
     if (authData?.user) {
+      let roleName: string | null = null
       try {
         const { data: userRole } = await supabase
           .from('user_roles')
-          .select('restaurant_id')
+          .select('restaurant_id, roles(name)')
           .eq('user_id', authData.user.id)
           .limit(1)
           .single()
 
         if (userRole) {
+          roleName = (userRole.roles as any)?.name ?? null
           await logActivity({
             restaurantId: userRole.restaurant_id,
             userId: authData.user.id,
             action: 'user.login',
-          })
+          }).catch(() => {}) // Non-critical
         }
       } catch {
-        // Activity logging is non-critical
+        // Non-critical
       }
+
+      revalidatePath('/', 'layout')
+      return { success: true, redirectTo: getRoleLandingPage(roleName) }
     }
   } catch (err) {
     // Distinguish between network errors and real auth errors
@@ -143,23 +148,28 @@ export async function login(data: LoginInput) {
       }
 
       if (authData?.user) {
+        let roleName: string | null = null
         try {
           const { data: userRole } = await supabase
             .from('user_roles')
-            .select('restaurant_id')
+            .select('restaurant_id, roles(name)')
             .eq('user_id', authData.user.id)
             .limit(1)
             .single()
           if (userRole) {
+            roleName = (userRole.roles as any)?.name ?? null
             await logActivity({
               restaurantId: userRole.restaurant_id,
               userId: authData.user.id,
               action: 'user.login',
-            })
+            }).catch(() => {})
           }
         } catch {
           // Non-critical
         }
+
+        revalidatePath('/', 'layout')
+        return { success: true, redirectTo: getRoleLandingPage(roleName) }
       }
     } catch (retryErr) {
       if (isTransientNetworkError(retryErr)) {
@@ -170,7 +180,26 @@ export async function login(data: LoginInput) {
   }
 
   revalidatePath('/', 'layout')
-  redirect('/admin/dashboard')
+  return { success: true, redirectTo: '/admin/dashboard' }
+}
+
+// ============================================================================
+// ROLE LANDING PAGE HELPER
+// ============================================================================
+function getRoleLandingPage(roleName: string | null): string {
+  const ROLE_LANDING: Record<string, string> = {
+    owner:              '/admin/dashboard',
+    admin:              '/admin/dashboard',
+    manager:            '/admin/dashboard',
+    reception:          '/admin/bookings',
+    cashier:            '/admin/pos',
+    kitchen:            '/admin/kitchen',
+    waiter:             '/admin/tables',
+    housekeeping:       '/admin/rooms',
+    inventory_manager:  '/admin/inventory',
+    viewer:             '/admin/dashboard',
+  }
+  return ROLE_LANDING[roleName ?? ''] ?? '/admin/dashboard'
 }
 
 export async function logout() {

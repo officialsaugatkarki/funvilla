@@ -53,7 +53,9 @@ function LoginForm() {
         toast.error(result.error)
       } else {
         toast.success('Logged in successfully')
-        router.push(redirectTo)
+        // Redirect to role-specific landing page returned by the server action
+        const destination = result?.redirectTo ?? redirectTo ?? '/admin/dashboard'
+        router.push(destination)
         router.refresh()
       }
     } catch (error) {

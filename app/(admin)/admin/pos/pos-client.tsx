@@ -18,6 +18,7 @@ import Image from 'next/image'
 import { createOrder, processPayment, getActiveOrdersForPOS } from '@/lib/actions/orders.actions'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
+import { Receipt as ReceiptComponent } from '@/components/admin/receipt'
 
 interface CartItem {
   menuItemId: string
@@ -462,7 +463,7 @@ export default function POSClient({
 
   // ── Shared: Menu Panel content ─────────────────────────────────────────────
   const MenuPanel = (
-    <div className="flex flex-col h-full gap-3">
+    <div className="flex flex-col h-full gap-3 overflow-hidden">
       {/* Search */}
       <div className="relative shrink-0">
         <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -504,7 +505,7 @@ export default function POSClient({
       </div>
 
       {/* Item grid */}
-      <ScrollArea className="flex-1 -mx-1">
+      <div className="flex-1 overflow-y-auto -mx-1 pb-4">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
             <UtensilsCrossed className="h-10 w-10 opacity-20 mb-3" />
@@ -526,7 +527,7 @@ export default function POSClient({
                   )}
                 >
                   {inCart && (
-                    <span className="absolute top-2 right-2 bg-primary text-primary-foreground text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                    <span className="absolute top-2 right-2 bg-primary text-primary-foreground text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center z-10 shadow-sm">
                       {inCart.quantity}
                     </span>
                   )}
@@ -551,16 +552,15 @@ export default function POSClient({
             })}
           </div>
         )}
-      </ScrollArea>
+      </div>
     </div>
   )
 
   return (
     <>
       {/* ── DESKTOP LAYOUT (md+) ────────────────────────────────────────────── */}
-      <div className="hidden md:flex h-[calc(100vh-7rem)] gap-4">
-        {/* Menu - left */}
-        <div className="flex-1 min-w-0 flex flex-col gap-3">
+      <div className="hidden md:flex h-[calc(100vh-7rem)] gap-4 no-print">
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-3">
           {MenuPanel}
         </div>
         {/* Order ticket - right */}
@@ -570,7 +570,7 @@ export default function POSClient({
       </div>
 
       {/* ── MOBILE LAYOUT (< md) ────────────────────────────────────────────── */}
-      <div className="md:hidden flex flex-col h-[calc(100vh-7rem)]">
+      <div className="md:hidden flex flex-col h-[calc(100vh-7rem)] no-print">
         {/* Tab switcher */}
         <div className="grid grid-cols-2 gap-1 p-1 bg-muted rounded-xl mb-3 shrink-0">
           <button
@@ -714,53 +714,16 @@ export default function POSClient({
 
       {/* ── Receipt Dialog ─────────────────────────────────────────────────── */}
       <Dialog open={isReceiptOpen} onOpenChange={(open) => { if (!open) resetPOS() }}>
-        <DialogContent className="sm:max-w-sm w-[calc(100%-2rem)] rounded-2xl max-h-[90vh] overflow-y-auto">
-          <div id="printable-receipt" className="font-mono">
-            <div className="text-center space-y-0.5 mb-5">
-              <h1 className="text-xl font-bold">Khukuri Restaurant & Resort</h1>
-              <p className="text-xs text-muted-foreground">Hetauda, Makwanpur, Nepal</p>
-              <p className="text-xs text-muted-foreground">Tel: +977 985-5073719</p>
+        <DialogContent className="sm:max-w-sm w-[calc(100%-2rem)] rounded-2xl max-h-[90vh] overflow-y-auto no-print">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Receipt Options</DialogTitle>
+          </DialogHeader>
+          <div className="text-center py-8 space-y-4">
+            <div className="h-16 w-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
+              <CheckCircle2 className="h-8 w-8" />
             </div>
-
-            <div className="text-xs space-y-1 mb-4 border-y border-dashed py-3">
-              <div className="flex justify-between"><span>Bill No:</span><span className="font-bold">#{completedOrder?.order_number}</span></div>
-              <div className="flex justify-between"><span>Date:</span><span>{new Date().toLocaleString('en-NP', { dateStyle: 'medium', timeStyle: 'short' })}</span></div>
-              <div className="flex justify-between"><span>Type:</span><span className="capitalize">{completedOrder?.order_type?.replace('_', '-') || 'Dine-in'}</span></div>
-              <div className="flex justify-between"><span>Payment:</span><span className="capitalize font-semibold">{paymentMethod}</span></div>
-            </div>
-
-            <div className="space-y-1.5 mb-4">
-              <div className="flex justify-between text-[10px] font-bold uppercase text-muted-foreground border-b pb-1">
-                <span>Item</span><span>Total</span>
-              </div>
-              {completedOrder?.items?.map((item: any, i: number) => (
-                <div key={i} className="flex justify-between text-xs">
-                  <span>{item.quantity}× {item.name}</span>
-                  <span>NPR {(item.price * item.quantity).toFixed(0)}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="text-xs space-y-1 border-t border-dashed pt-3 mb-6">
-              <div className="flex justify-between text-muted-foreground">
-                <span>Subtotal</span><span>NPR {completedOrder?.subtotal?.toFixed(0)}</span>
-              </div>
-              {completedOrder?.discountAmount > 0 && (
-                <div className="flex justify-between text-emerald-600">
-                  <span>Discount</span><span>− NPR {completedOrder?.discountAmount?.toFixed(0)}</span>
-                </div>
-              )}
-              {taxRate > 0 && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>VAT ({taxRate}%)</span><span>NPR {completedOrder?.tax?.toFixed(0)}</span>
-                </div>
-              )}
-              <div className="flex justify-between font-bold text-base border-t pt-2 mt-1">
-                <span>TOTAL</span><span>NPR {completedOrder?.total?.toFixed(0)}</span>
-              </div>
-            </div>
-
-            <p className="text-center text-xs text-muted-foreground">Thank you for visiting Khukuri Resort!</p>
+            <h2 className="text-xl font-bold">Payment Successful</h2>
+            <p className="text-sm text-muted-foreground">Order #{completedOrder?.order_number} has been paid and completed.</p>
           </div>
 
           <DialogFooter className="flex-col sm:flex-row gap-2 mt-4">
@@ -770,14 +733,33 @@ export default function POSClient({
             <Button
               className="flex-1"
               onClick={() => {
-                const el = document.getElementById('printable-receipt')
-                if (el) {
-                  const w = window.open('', '_blank', 'width=400,height=600')
-                  if (w) {
-                    w.document.write(`<html><head><title>Receipt</title><style>body{font-family:monospace;padding:16px;font-size:12px}*{margin:0;padding:0;box-sizing:border-box}.flex{display:flex}.justify-between{justify-content:space-between}.font-bold{font-weight:bold}</style></head><body>${el.innerHTML}</body></html>`)
-                    w.document.close()
-                    w.print()
-                  }
+                const receiptHtml = document.getElementById('print-root')?.outerHTML
+                if (!receiptHtml) return
+                
+                const printWindow = window.open('', '_blank', 'width=400,height=600')
+                if (printWindow) {
+                  printWindow.document.write(`
+                    <!DOCTYPE html>
+                    <html>
+                      <head>
+                        <title>Receipt</title>
+                        <style>
+                          @page { margin: 0; size: 80mm 297mm; }
+                          body { margin: 0; padding: 0; font-family: monospace; background: white; }
+                        </style>
+                      </head>
+                      <body>
+                        ${receiptHtml.replace('class="hidden"', '')}
+                        <script>
+                          window.onload = () => { 
+                            window.print();
+                            setTimeout(() => { window.close(); }, 500);
+                          }
+                        </script>
+                      </body>
+                    </html>
+                  `)
+                  printWindow.document.close()
                 }
               }}
             >
@@ -786,6 +768,16 @@ export default function POSClient({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      {/* Actual Printable Receipt */}
+      {completedOrder && (
+        <ReceiptComponent 
+          order={completedOrder} 
+          paymentMethod={paymentMethod} 
+          taxRate={taxRate} 
+          serviceChargeRate={serviceChargeRate} 
+        />
+      )}
     </>
   )
 }

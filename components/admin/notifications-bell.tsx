@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Bell } from 'lucide-react'
+import { Trash2, Bell } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { Badge } from '@/components/ui/badge'
@@ -33,14 +33,16 @@ export default function NotificationsBell({ restaurantId }: { restaurantId: stri
   useEffect(() => {
     const supabase = createClient()
 
-    // Fetch existing unread notifications
+    // Fetch existing notifications from last 24 hours
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    
     supabase
       .from('notifications')
       .select('*')
       .eq('restaurant_id', restaurantId)
-      .eq('is_read', false)
+      .gte('created_at', twentyFourHoursAgo)
       .order('created_at', { ascending: false })
-      .limit(20)
+      .limit(50)
       .then((res: any) => {
         const { data } = res
         if (data) setNotifications(data)
@@ -86,6 +88,14 @@ export default function NotificationsBell({ restaurantId }: { restaurantId: stri
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
   }
 
+  async function clearAll() {
+    const supabase = createClient()
+    await supabase.from('notifications').delete().eq('restaurant_id', restaurantId)
+    setNotifications([])
+    setOpen(false)
+    toast.success('All notifications cleared')
+  }
+
   function getNotificationIcon(type: string) {
     const icons: Record<string, string> = {
       new_order: '🍽️',
@@ -114,9 +124,17 @@ export default function NotificationsBell({ restaurantId }: { restaurantId: stri
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80 max-h-96 overflow-y-auto">
         <DropdownMenuLabel className="flex items-center justify-between">
-          <span>Notifications</span>
-          {unreadCount > 0 && (
-            <span className="text-xs text-muted-foreground">{unreadCount} unread</span>
+          <div className="flex items-center gap-2">
+            <span>Notifications</span>
+            {unreadCount > 0 && (
+              <span className="text-xs text-muted-foreground">{unreadCount} unread</span>
+            )}
+          </div>
+          {notifications.length > 0 && (
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={(e) => { e.preventDefault(); clearAll(); }}>
+              <Trash2 className="h-3 w-3 mr-1" />
+              Clear All
+            </Button>
           )}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />

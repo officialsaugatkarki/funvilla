@@ -132,3 +132,26 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+@media print {
+  @page {
+    margin: 0;
+    size: auto;
+  }
+  
+  body {
+    background-color: white !important;
+    color: black !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Helper classes */
+  .no-print, [data-slot="dialog-portal"] {
+    display: none !important;
+  }
+  
+  .print-only {
+    display: block !important;
+  }
+}

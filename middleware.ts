@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/middleware-client'
+import type { RoleName } from '@/lib/types'
 
 // Routes that are always public (no auth required)
 const PUBLIC_ROUTES = [
@@ -38,6 +39,46 @@ const ROLE_LANDING: Record<string, string> = {
   viewer:             '/admin/dashboard',
 }
 
+// Routes each role is allowed to access (server enforced)
+const ROLE_ALLOWED_ROUTES: Record<string, string[]> = {
+  owner:              ['*'],
+  admin:              ['*'],
+  manager: [
+    '/admin/dashboard', '/admin/menu', '/admin/orders', '/admin/pos',
+    '/admin/kitchen', '/admin/tables', '/admin/rooms', '/admin/bookings',
+    '/admin/pool', '/admin/inventory', '/admin/suppliers', '/admin/purchase-orders',
+    '/admin/customers', '/admin/employees', '/admin/reports', '/admin/settings',
+    '/admin/unauthorized',
+  ],
+  reception: [
+    '/admin/bookings', '/admin/rooms', '/admin/pool',
+    '/admin/customers', '/admin/orders', '/admin/unauthorized',
+  ],
+  cashier: [
+    '/admin/pos', '/admin/orders', '/admin/tables',
+    '/admin/customers', '/admin/unauthorized',
+  ],
+  kitchen: [
+    '/admin/kitchen', '/admin/orders', '/admin/menu', '/admin/unauthorized',
+  ],
+  waiter: [
+    '/admin/tables', '/admin/orders', '/admin/menu',
+    '/admin/customers', '/admin/unauthorized',
+  ],
+  housekeeping: [
+    '/admin/rooms', '/admin/bookings', '/admin/unauthorized',
+  ],
+  inventory_manager: [
+    '/admin/inventory', '/admin/suppliers', '/admin/purchase-orders',
+    '/admin/menu', '/admin/reports', '/admin/unauthorized',
+  ],
+  viewer: [
+    '/admin/dashboard', '/admin/menu', '/admin/orders', '/admin/rooms',
+    '/admin/bookings', '/admin/inventory', '/admin/customers', '/admin/reports',
+    '/admin/unauthorized',
+  ],
+}
+
 export async function middleware(request: NextRequest) {
   let supabase;
   let supabaseResponse = NextResponse.next({ request });
@@ -45,16 +86,15 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   try {
-    const client = createClient(request);
-    supabase = client.supabase;
-    supabaseResponse = client.supabaseResponse;
+    const client = createClient(request)
+    supabase = client.supabase
+    supabaseResponse = client.supabaseResponse
 
-    const { data } = await supabase.auth.getUser();
-    user = data.user;
+    const { data } = await supabase.auth.getUser()
+    user = data.user
   } catch (error) {
-    console.error('Middleware Supabase error:', error);
-    // On error (e.g., missing env vars), treat as unauthenticated but don't crash
-    user = null;
+    console.error('Middleware Supabase error:', error)
+    user = null
   }
 
   const isPublicRoute = PUBLIC_ROUTES.some(
@@ -77,14 +117,14 @@ export async function middleware(request: NextRequest) {
   }
 
   // === CASE 1: Auth route ===
-  // Already logged in → redirect to their dashboard
+  // Already logged in → redirect to their role-specific dashboard
   if (isAuthRoute && user) {
-    let landing = '/admin/dashboard';
+    let landing = '/admin/dashboard'
     try {
-      const roleName = await getUserRole(supabase, user.id);
-      landing = ROLE_LANDING[roleName ?? ''] ?? '/admin/dashboard';
+      const roleName = await getUserRole(supabase, user.id)
+      landing = ROLE_LANDING[roleName ?? ''] ?? '/admin/dashboard'
     } catch (e) {
-      console.error('Error fetching role in middleware:', e);
+      console.error('Error fetching role in middleware:', e)
     }
     return NextResponse.redirect(new URL(landing, request.url))
   }
@@ -97,7 +137,39 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
-  // === CASE 3: API routes ===
+  // === CASE 3: Admin route + logged in → enforce route-level RBAC ===
+  if (isAdminRoute && user) {
+    // /admin/unauthorized is always accessible to logged-in users
+    if (pathname === '/admin/unauthorized') {
+      return supabaseResponse
+    }
+
+    try {
+      const roleName = await getUserRole(supabase, user.id)
+
+      if (roleName) {
+        const allowedRoutes = ROLE_ALLOWED_ROUTES[roleName] ?? []
+
+        // Wildcard means full access
+        if (!allowedRoutes.includes('*')) {
+          // Check if the current path starts with any allowed route
+          const isAllowed = allowedRoutes.some(
+            route => pathname === route || pathname.startsWith(route + '/')
+          )
+
+          if (!isAllowed) {
+            // Redirect to their role-specific landing page instead of 403/404
+            const landing = ROLE_LANDING[roleName] ?? '/admin/unauthorized'
+            return NextResponse.redirect(new URL(landing, request.url))
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error checking route permissions in middleware:', e)
+    }
+  }
+
+  // === CASE 4: API routes ===
   // Protected API routes (non-public) require auth
   if (isApiRoute && !pathname.startsWith('/api/public/') && !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

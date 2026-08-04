@@ -19,7 +19,7 @@ const STATUS_STYLES: Record<string, { bg: string; border: string; dot: string }>
   disabled:  { bg: 'bg-muted/50', border: 'border-border', dot: 'bg-muted-foreground' },
 }
 
-export default function TablesClient({ tables: initialTables }: { tables: any[] }) {
+export default function TablesClient({ tables: initialTables, canAccessPOS = true }: { tables: any[], canAccessPOS?: boolean }) {
   const [tables, setTables] = useState(initialTables)
   const [filter, setFilter] = useState('all')
   const [isLive, setIsLive] = useState(false)
@@ -92,9 +92,11 @@ export default function TablesClient({ tables: initialTables }: { tables: any[] 
               <WifiOff className="h-3 w-3" /> Connecting...
             </Badge>
           )}
-          <Button asChild variant="outline" size="sm">
-            <Link href="/admin/pos">Go to POS</Link>
-          </Button>
+          {canAccessPOS && (
+            <Button asChild variant="outline" size="sm">
+              <Link href="/admin/pos">Go to POS</Link>
+            </Button>
+          )}
         </div>
       </div>
 

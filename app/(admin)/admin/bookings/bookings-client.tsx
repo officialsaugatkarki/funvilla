@@ -79,8 +79,8 @@ export default function BookingsClient({ bookings, rooms }: { bookings: any[], r
         </Select>
       </div>
 
-      <div className="rounded-xl border bg-card">
-        <table className="w-full text-sm">
+      <div className="rounded-xl border bg-card overflow-x-auto">
+        <table className="w-full text-sm min-w-[800px]">
           <thead className="bg-muted/50 border-b">
             <tr>
               <th className="text-left p-4 font-medium">Guest</th>
