@@ -11,23 +11,23 @@ export function Receipt({ order, paymentMethod, taxRate, serviceChargeRate = 0 }
   if (!order) return null
 
   const s = {
-    root: { fontFamily: 'monospace', fontSize: '12px', lineHeight: '1.2', color: 'black', background: 'white', padding: '8px', width: '100%', maxWidth: '300px', margin: '0 auto' },
+    root: { fontFamily: 'monospace', fontSize: '13px', fontWeight: '500', lineHeight: '1.3', color: '#000000', background: '#FFFFFF', padding: '12px 8px', width: '100%', maxWidth: '300px', margin: '0 auto' },
     center: { textAlign: 'center' as const },
     right: { textAlign: 'right' as const },
     left: { textAlign: 'left' as const },
-    bold: { fontWeight: 'bold' },
+    bold: { fontWeight: '800' },
     uppercase: { textTransform: 'uppercase' as const },
     capitalize: { textTransform: 'capitalize' as const },
-    flexBetween: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' },
-    divider: { borderTop: '1px dashed black', margin: '8px 0' },
-    thickDivider: { borderTop: '2px solid black', margin: '12px 0 4px 0' },
-    wLabel: { width: '80px', flexShrink: 0 },
-    wQty: { width: '24px', flexShrink: 0 },
-    wTotal: { width: '56px', flexShrink: 0, textAlign: 'right' as const },
+    flexBetween: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' },
+    divider: { borderTop: '2px dashed #000000', margin: '10px 0' },
+    thickDivider: { borderTop: '3px solid #000000', margin: '14px 0 6px 0' },
+    wLabel: { width: '85px', flexShrink: 0 },
+    wQty: { width: '28px', flexShrink: 0 },
+    wTotal: { width: '60px', flexShrink: 0, textAlign: 'right' as const },
     flex1: { flex: 1, padding: '0 4px', wordBreak: 'break-word' as const },
-    h1: { fontSize: '16px', margin: '0 0 4px 0' },
-    h2: { fontSize: '14px', margin: '0 0 4px 0' },
-    p0: { margin: '0 0 2px 0', fontSize: '11px' }
+    h1: { fontSize: '18px', margin: '0 0 4px 0' },
+    h2: { fontSize: '16px', margin: '0 0 6px 0' },
+    p0: { margin: '0 0 4px 0', fontSize: '12px' }
   }
 
   return (
@@ -41,7 +41,7 @@ export function Receipt({ order, paymentMethod, taxRate, serviceChargeRate = 0 }
 
       <div style={s.divider}></div>
 
-      <div style={{ fontSize: '11px', marginBottom: '8px' }}>
+      <div style={{ marginBottom: '8px' }}>
         <div style={s.flexBetween}>
           <span style={s.wLabel}>Invoice No</span>
           <span style={s.flex1}>: {order.order_number ? `ORD-${order.order_number}` : '-'}</span>
@@ -67,14 +67,14 @@ export function Receipt({ order, paymentMethod, taxRate, serviceChargeRate = 0 }
       <div style={s.divider}></div>
 
       <div style={{ marginBottom: '8px' }}>
-        <div style={{ ...s.flexBetween, ...s.bold, fontSize: '11px' }}>
+        <div style={{ ...s.flexBetween, ...s.bold }}>
           <span style={s.wQty}>Qty</span>
           <span style={{ ...s.flex1, ...s.left }}>Item</span>
           <span style={s.wTotal}>Total</span>
         </div>
         <div style={s.divider}></div>
         {order.items?.map((item: any, i: number) => (
-          <div key={i} style={{ ...s.flexBetween, fontSize: '11px' }}>
+          <div key={i} style={s.flexBetween}>
             <span style={s.wQty}>{item.quantity}</span>
             <span style={{ ...s.flex1, ...s.left }}>{item.name}</span>
             <span style={s.wTotal}>{Number(item.price * item.quantity).toFixed(0)}</span>
@@ -84,7 +84,7 @@ export function Receipt({ order, paymentMethod, taxRate, serviceChargeRate = 0 }
 
       <div style={s.divider}></div>
 
-      <div style={{ fontSize: '11px', marginBottom: '16px' }}>
+      <div style={{ marginBottom: '16px' }}>
         <div style={s.flexBetween}>
           <span>Subtotal</span>
           <span>NPR {Number(order.subtotal || 0).toFixed(0)}</span>
@@ -108,7 +108,7 @@ export function Receipt({ order, paymentMethod, taxRate, serviceChargeRate = 0 }
           </div>
         )}
         <div style={{ ...s.divider, marginTop: '4px', marginBottom: '4px' }}></div>
-        <div style={{ ...s.flexBetween, ...s.bold, fontSize: '13px' }}>
+        <div style={{ ...s.flexBetween, ...s.bold, fontSize: '15px' }}>
           <span>GRAND TOTAL</span>
           <span>NPR {Number(order.total || 0).toFixed(0)}</span>
         </div>
@@ -116,7 +116,7 @@ export function Receipt({ order, paymentMethod, taxRate, serviceChargeRate = 0 }
 
       <div style={s.divider}></div>
 
-      <div style={{ ...s.center, fontSize: '11px', marginTop: '16px', marginBottom: '8px' }}>
+      <div style={{ ...s.center, marginTop: '16px', marginBottom: '8px' }}>
         <p style={{ ...s.bold, margin: '0 0 2px 0' }}>Thank you for visiting!</p>
         <p style={{ margin: 0 }}>Please visit us again ❤️</p>
       </div>
