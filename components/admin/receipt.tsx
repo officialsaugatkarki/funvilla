@@ -122,7 +122,7 @@ export function buildReceiptHtml(
     }
     pre {
       font-family: "Courier New", "Courier", monospace;
-      font-size: 10px; /* Reduced to ensure it fits 58mm roll */
+      font-size: 11.5px; /* Scaled up to perfectly fill 58mm width for 31 chars */
       font-weight: bold;
       line-height: 1.35;
       white-space: pre;
@@ -162,9 +162,10 @@ export function downloadReceiptImage(
   if (!ctx) return
   
   // Set dimensions (384px is typical 58mm printer width at 8 dots/mm)
-  const fontSize = 20
-  const lineHeight = 24
-  const padding = 20
+  // Adjusted font size and padding so 31 chars fit perfectly inside 384px
+  const fontSize = 18 
+  const lineHeight = 22
+  const padding = 12
   
   canvas.width = 384 
   canvas.height = (lines.length * lineHeight) + (padding * 2)
@@ -175,7 +176,7 @@ export function downloadReceiptImage(
   
   // Draw text
   ctx.fillStyle = '#000000'
-  ctx.font = `${fontSize}px "Courier New", Courier, monospace`
+  ctx.font = `bold ${fontSize}px "Courier New", Courier, monospace`
   ctx.textBaseline = 'top'
   
   lines.forEach((line, index) => {
