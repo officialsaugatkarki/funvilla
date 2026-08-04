@@ -745,7 +745,8 @@ export default function POSClient({
                         <title>Receipt</title>
                         <style>
                           @page { margin: 0; }
-                          body { margin: 0; padding: 0; font-family: monospace; background: white; color: black; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                          * { box-sizing: border-box; }
+                          body { margin: 0; padding: 0; width: 100%; font-family: "Arial", "Helvetica", sans-serif; background: white; color: black; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                         </style>
                       </head>
                       <body>
