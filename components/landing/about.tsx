@@ -21,9 +21,9 @@ export function About() {
           >
             <Image
               src="/assets/IMG_0891.jpeg"
-              alt="Khukuri Restaurant and Resort"
+              alt="Khukuri Restaurant and Fun Villa"
               fill
-              className="object-cover"
+              className="object-cover rounded-2xl"
             />
           </motion.div>
 
@@ -47,7 +47,7 @@ export function About() {
           </h2>
           <div className="space-y-4 text-foreground/65 text-base font-light">
             <p>
-              Nestled in the heart of nature, Khukuri Restaurant &amp; Resort offers a sanctuary for those seeking exceptional dining, relaxing stays, and unforgettable family moments.
+              Nestled in the heart of nature, Khukuri Restaurant &amp; Fun Villa offers a sanctuary for those seeking exceptional dining, relaxing stays, and unforgettable family moments.
             </p>
             <p>
               Whether you are here to savor our Chef's signature dishes, unwind by the crystal-clear swimming pool, or celebrate a milestone event, we ensure every detail is crafted to perfection.

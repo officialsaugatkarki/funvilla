@@ -25,7 +25,7 @@ export function Navbar() {
           />
           <div className="flex flex-col">
             <span className="font-serif text-lg leading-none tracking-wide text-primary uppercase">Khukuri</span>
-            <span className="text-[8px] font-sans font-semibold uppercase tracking-[0.2em] text-primary/60">Restaurant & Resort</span>
+            <span className="text-[8px] font-sans font-semibold uppercase tracking-[0.2em] text-primary/60">Restaurant & Fun Villa</span>
           </div>
         </Link>
 

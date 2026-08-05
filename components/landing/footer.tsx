@@ -62,7 +62,7 @@ export function Footer() {
             <Link href="/" className="inline-flex items-center gap-2.5 mb-4">
               <Image
                 src="/images/logo.jpeg"
-                alt="Khukuri Restaurant & Resort"
+                alt="Khukuri Restaurant & Fun Villa"
                 width={36}
                 height={36}
                 className="rounded-full border border-white/20"
@@ -131,7 +131,7 @@ export function Footer() {
 
         {/* Copyright */}
         <div className="flex flex-col sm:flex-row justify-between items-center gap-3 text-[10px] text-white/35 pb-4">
-          <p>&copy; {new Date().getFullYear()} Khukuri Restaurant &amp; Resort. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} Khukuri Restaurant &amp; Fun Villa. All rights reserved.</p>
           <div className="flex gap-4">
             <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
             <a href="#" className="hover:text-white transition-colors">Terms of Service</a>

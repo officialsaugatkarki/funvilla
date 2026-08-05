@@ -66,9 +66,9 @@ export default function ReportsClient({
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center no-print">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 no-print">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full max-w-3xl">
-          <TabsList className="grid grid-cols-5 w-full">
+          <TabsList className="flex overflow-x-auto w-full max-w-full justify-start md:grid md:grid-cols-5 h-auto p-1">
             <TabsTrigger value="revenue">Revenue</TabsTrigger>
             <TabsTrigger value="inventory">Inventory</TabsTrigger>
             <TabsTrigger value="rooms">Rooms</TabsTrigger>

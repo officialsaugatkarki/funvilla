@@ -37,7 +37,7 @@ export function PoolPackageForm({ packageName, price, trigger }: PoolPackageForm
 
       // Open WhatsApp with pre-filled message
       const msg =
-        `Hello! I'd like to register for *Swimming Training* at Khukuri Resort.\n\n` +
+        `Hello! I'd like to register for *Swimming Training* at Khukuri Fun Villa.\n\n` +
         `📦 *Package:* ${packageName} (NPR ${price.toLocaleString()})\n` +
         `👤 *Name:* ${visitorName}\n` +
         `📞 *Phone:* ${phone}\n\n` +
@@ -75,7 +75,7 @@ export function PoolPackageForm({ packageName, price, trigger }: PoolPackageForm
                 <X className="h-4 w-4 text-white" />
               </Dialog.Close>
             </div>
-            <p className="text-white/70 text-xs mt-2">NPR {price.toLocaleString()} · For everyone · Khukuri Resort</p>
+            <p className="text-white/70 text-xs mt-2">NPR {price.toLocaleString()} · For everyone · Khukuri Fun Villa</p>
           </div>
 
           {/* Body */}

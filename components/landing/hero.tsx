@@ -13,7 +13,7 @@ export function Hero() {
       <div className="absolute inset-0 z-0">
         <Image
           src="/assets/IMG_0894.jpeg"
-          alt="Khukuri Resort View"
+          alt="Khukuri Fun Villa View"
           fill
           priority
           className="object-cover opacity-80"

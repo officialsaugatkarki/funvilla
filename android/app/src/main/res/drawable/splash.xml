@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 
+  Splash Screen: Shows Khukuri logo centered on a white background.
+  The logo image is kept at its natural aspect ratio using inset.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- White background matching the logo -->
+    <item>
+        <color android:color="#FFFFFF" />
+    </item>
+
+    <!-- Logo centered with padding (inset = 20% on all sides so logo is 60% of screen width) -->
+    <item
+        android:gravity="center"
+        android:width="220dp"
+        android:height="220dp">
+        <bitmap
+            android:src="@drawable/splash_logo"
+            android:gravity="center"
+            android:scaleType="fitCenter" />
+    </item>
+
+</layer-list>

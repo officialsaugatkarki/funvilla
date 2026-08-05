@@ -5,12 +5,12 @@ import { motion } from 'framer-motion'
 
 // Consistent aspect ratios for gallery masonry
 const galleryImages = [
-  { src: '/assets/IMG_0891.jpeg', alt: 'Khukuri Resort Gallery 1', aspect: 'aspect-[3/4]' },
-  { src: '/assets/IMG_0892.jpeg', alt: 'Khukuri Resort Gallery 2', aspect: 'aspect-[4/3]' },
-  { src: '/assets/IMG_0894.jpeg', alt: 'Khukuri Resort Gallery 3', aspect: 'aspect-[3/4]' },
-  { src: '/assets/IMG_0895.jpeg', alt: 'Khukuri Resort Gallery 4', aspect: 'aspect-[4/3]' },
-  { src: '/assets/IMG_0900.jpeg', alt: 'Khukuri Resort Gallery 5', aspect: 'aspect-[3/4]' },
-  { src: '/assets/IMG_0902.jpeg', alt: 'Khukuri Resort Gallery 6', aspect: 'aspect-[4/3]' },
+  { src: '/assets/IMG_0891.jpeg', alt: 'Khukuri Fun Villa Gallery 1', aspect: 'aspect-[3/4]' },
+  { src: '/assets/IMG_0892.jpeg', alt: 'Khukuri Fun Villa Gallery 2', aspect: 'aspect-[4/3]' },
+  { src: '/assets/IMG_0894.jpeg', alt: 'Khukuri Fun Villa Gallery 3', aspect: 'aspect-[3/4]' },
+  { src: '/assets/IMG_0895.jpeg', alt: 'Khukuri Fun Villa Gallery 4', aspect: 'aspect-[4/3]' },
+  { src: '/assets/IMG_0900.jpeg', alt: 'Khukuri Fun Villa Gallery 5', aspect: 'aspect-[3/4]' },
+  { src: '/assets/IMG_0902.jpeg', alt: 'Khukuri Fun Villa Gallery 6', aspect: 'aspect-[4/3]' },
 ]
 
 export function Gallery() {

@@ -94,7 +94,7 @@ export default function PoolClient({ tickets }: { tickets: any[] }) {
         <Input placeholder="Search tickets..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
       </div>
 
-      <div className="rounded-xl border bg-card">
+      <div className="rounded-xl border bg-card overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-muted/50 border-b">
             <tr>

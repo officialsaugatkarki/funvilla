@@ -6,28 +6,28 @@ import { NativeProvider } from '@/components/providers/native-provider'
 import './globals.css'
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://khukuri-resort.com')),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://khukurirestaurantfunvilla.com')),
   title: {
-    default: 'Khukuri Restaurant & Resort | Premium Dining & Stay in Nepal',
-    template: '%s | Khukuri Restaurant & Resort',
+    default: 'Khukuri Restaurant & Fun Villa | Premium Dining & Stay in Nepal',
+    template: '%s | Khukuri Restaurant & Fun Villa',
   },
-  description: 'Experience authentic Nepali cuisine, premium luxury stays, and relaxing pool amenities at Khukuri Restaurant & Resort. Book your table or room today.',
+  description: 'Experience authentic Nepali cuisine, premium luxury stays, and relaxing pool amenities at Khukuri Restaurant & Fun Villa. Book your table or room today.',
   keywords: ['restaurant in nepal', 'resort', 'authentic nepali food', 'luxury stay', 'swimming pool resort', 'khukuri restaurant'],
-  authors: [{ name: 'Khukuri HMP' }],
-  creator: 'saugat karki',
+  authors: [{ name: 'Khukuri Restaurant & Fun Villa' }],
+  creator: 'Khukuri Restaurant & Fun Villa',
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://khukuri-resort.com'),
-    title: 'Khukuri Restaurant & Resort',
-    description: 'Experience authentic Nepali cuisine, premium luxury stays, and relaxing pool amenities at Khukuri Restaurant & Resort.',
-    siteName: 'Khukuri Restaurant & Resort',
-    images: [{ url: '/images/logo.jpeg', width: 800, height: 600, alt: 'Khukuri Resort Logo' }],
+    url: process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://khukurirestaurantfunvilla.com'),
+    title: 'Khukuri Restaurant & Fun Villa',
+    description: 'Experience authentic Nepali cuisine, premium luxury stays, and relaxing pool amenities at Khukuri Restaurant & Fun Villa.',
+    siteName: 'Khukuri Restaurant & Fun Villa',
+    images: [{ url: '/images/logo.jpeg', width: 800, height: 600, alt: 'Khukuri Fun Villa Logo' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Khukuri Restaurant & Resort',
-    description: 'Experience authentic Nepali cuisine, premium luxury stays, and relaxing pool amenities at Khukuri Restaurant & Resort.',
+    title: 'Khukuri Restaurant & Fun Villa',
+    description: 'Experience authentic Nepali cuisine, premium luxury stays, and relaxing pool amenities at Khukuri Restaurant & Fun Villa.',
     images: ['/images/logo.jpeg'],
   },
   icons: {

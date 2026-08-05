@@ -49,7 +49,7 @@ export function RoomBookingForm({ roomName, roomTypeId, price, trigger }: RoomBo
 
       // Open WhatsApp with pre-filled message
       const msg =
-        `Hello! I'd like to book the *${roomName}* at Khukuri Resort.\n\n` +
+        `Hello! I'd like to book the *${roomName}* at Khukuri Fun Villa.\n\n` +
         `👤 *Name:* ${guestName}\n` +
         `📞 *Phone:* ${guestPhone}\n` +
         `👥 *Guests:* ${guestCount}\n` +
@@ -80,7 +80,7 @@ export function RoomBookingForm({ roomName, roomTypeId, price, trigger }: RoomBo
           <div className="bg-primary px-6 py-5">
             <div className="flex justify-between items-start">
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-white/60 mb-1">Khukuri Resort</p>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-white/60 mb-1">Khukuri Fun Villa</p>
                 <Dialog.Title className="text-xl font-serif text-white flex items-center gap-2">
                   <BedDouble className="h-5 w-5 text-accent" /> Book {roomName}
                 </Dialog.Title>
