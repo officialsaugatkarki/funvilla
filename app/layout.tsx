@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { playfair, inter } from './fonts'
 import { Analytics } from '@vercel/analytics/next'
 import { Toaster } from 'sonner'
+import { NativeProvider } from '@/components/providers/native-provider'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -43,9 +44,11 @@ export default function RootLayout({
   return (
     <html lang="en" className="scroll-smooth" suppressHydrationWarning>
       <body className={`${inter.variable} ${playfair.variable} font-sans antialiased bg-background text-foreground`} suppressHydrationWarning>
-        {children}
-        <Toaster richColors position="top-right" />
-        {process.env.NODE_ENV === 'production' && <Analytics />}
+        <NativeProvider>
+          {children}
+          <Toaster richColors position="top-right" />
+          {process.env.NODE_ENV === 'production' && <Analytics />}
+        </NativeProvider>
       </body>
     </html>
   )

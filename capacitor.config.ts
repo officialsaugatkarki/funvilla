@@ -17,8 +17,8 @@ const config: CapacitorConfig = {
   //
   // Change this to your production URL or local LAN server IP.
   server: {
-    url: 'https://funvilla.vercel.app',   // ← update if URL changes
-    cleartext: false,                      // set true ONLY for local http://
+    url: 'https://khukurirestaurantfunvilla.vercel.app',
+    cleartext: false,
   },
 
   plugins: {
