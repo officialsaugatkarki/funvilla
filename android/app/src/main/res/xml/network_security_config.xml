@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    network_security_config.xml
+
+    Allows plaintext (HTTP / raw TCP) traffic ONLY to:
+    - The local printer subnet (192.168.1.x)
+
+    The production Next.js server URL uses HTTPS so it is always allowed.
+    This config does NOT allow plaintext to any internet host.
+-->
+<network-security-config>
+    <!-- Allow cleartext to the LAN printer subnet only -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">192.168.1.127</domain>
+    </domain-config>
+
+    <!-- All other connections (e.g., Vercel/Supabase) use HTTPS — no extra config needed -->
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

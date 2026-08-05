@@ -18,7 +18,8 @@ import Image from 'next/image'
 import { createOrder, processPayment, getActiveOrdersForPOS } from '@/lib/actions/orders.actions'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
-import { printReceiptImageDirectly, downloadReceiptImage } from '@/components/admin/receipt'
+import { printReceipt } from '@/lib/printing/print-bridge'
+import { downloadReceiptImage } from '@/components/admin/receipt'
 
 interface CartItem {
   menuItemId: string
@@ -743,7 +744,7 @@ export default function POSClient({
             <Button
               className="flex-1"
               onClick={() => {
-                printReceiptImageDirectly(completedOrder, paymentMethod, taxRate, serviceChargeRate)
+                printReceipt(completedOrder, paymentMethod, taxRate, serviceChargeRate)
               }}
             >
               <Receipt className="mr-2 h-4 w-4" /> Print Receipt
