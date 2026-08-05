@@ -16,5 +16,14 @@ class MainActivity : BridgeActivity() {
         // Register all custom plugins BEFORE calling super.onCreate
         registerPlugin(ThermalPrinterPlugin::class.java)
         super.onCreate(savedInstanceState)
+
+        // Enhance native feel by disabling WebView overscroll and zoom
+        val webView = this.bridge.webView
+        webView.overScrollMode = android.view.View.OVER_SCROLL_NEVER
+        
+        val settings = webView.settings
+        settings.builtInZoomControls = false
+        settings.displayZoomControls = false
+        settings.setSupportZoom(false)
     }
 }

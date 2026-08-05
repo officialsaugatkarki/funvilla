@@ -2,7 +2,6 @@ import dynamic from 'next/dynamic'
 import { LayoutContainer } from '@/components/ui/layout-container'
 import { Navbar } from '@/components/landing/navbar'
 import { Hero } from '@/components/landing/hero'
-import { NativeRedirect } from '@/components/native-redirect'
 
 // Lazy-load below-the-fold components to improve initial JS payload and parse time.
 const Experiences = dynamic(() => import('@/components/landing/experiences').then(mod => mod.Experiences))
@@ -19,7 +18,6 @@ const Footer = dynamic(() => import('@/components/landing/footer').then(mod => m
 export default function Home() {
   return (
     <div className="flex flex-col min-h-screen bg-background">
-      <NativeRedirect />
       <LayoutContainer>
         <Navbar />
         <Hero />

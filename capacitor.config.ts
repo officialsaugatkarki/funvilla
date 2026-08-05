@@ -17,15 +17,17 @@ const config: CapacitorConfig = {
   //
   // Change this to your production URL or local LAN server IP.
   server: {
-    url: 'https://khukurirestaurantfunvilla.vercel.app',
+    url: 'https://khukurirestaurantfunvilla.com',
     cleartext: false,
+    appendUserAgent: 'CapacitorNativeApp',
+    allowNavigation: ['khukurirestaurantfunvilla.com'],
   },
 
   plugins: {
     SplashScreen: {
-      launchShowDuration: 2000,
-      launchAutoHide: true,
-      backgroundColor: '#1a1a2e',
+      launchShowDuration: 10000,
+      launchAutoHide: false,
+      backgroundColor: '#F9F8F6',
       androidSplashResourceName: 'splash',
       showSpinner: false,
     },

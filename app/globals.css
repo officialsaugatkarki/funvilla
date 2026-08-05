@@ -172,3 +172,20 @@ html.is-native .backdrop-blur {
 html.is-native .bg-black\/40 {
   background-color: rgba(0, 0, 0, 0.8) !important;
 }
+
+/* 
+ * Disable text selection and highlights for native feel
+ */
+html.is-native {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Ensure inputs remain selectable and usable */
+html.is-native input,
+html.is-native textarea {
+  -webkit-user-select: auto;
+  user-select: auto;
+}
