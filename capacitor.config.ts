@@ -19,8 +19,8 @@ const config: CapacitorConfig = {
   server: {
     url: 'https://khukurirestaurantfunvilla.com',
     cleartext: false,
-    appendUserAgent: 'CapacitorNativeApp',
     allowNavigation: ['khukurirestaurantfunvilla.com'],
+    appStartPath: '/auth/login',
   },
 
   plugins: {

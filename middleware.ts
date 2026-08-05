@@ -116,14 +116,6 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse
   }
 
-  // === CASE 0: Native App Root Redirect ===
-  // If the native Capacitor app requests the homepage, instantly redirect to login.
-  // This completely eliminates the "browser loading" flash.
-  const userAgent = request.headers.get('user-agent') || ''
-  if (pathname === '/' && userAgent.includes('CapacitorNativeApp')) {
-    return NextResponse.redirect(new URL('/auth/login', request.url))
-  }
-
   // === CASE 1: Auth route ===
   // Already logged in → redirect to their role-specific dashboard
   if (isAuthRoute && user) {
