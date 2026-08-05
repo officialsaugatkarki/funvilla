@@ -40,8 +40,6 @@ const config: CapacitorConfig = {
     allowMixedContent: false,
     // Capture console.log from WebView into Android logcat
     loggingBehavior: 'debug',
-    // Use hardware back button to navigate within the WebView
-    handleApplicationNotifications: false,
   },
 }
 
