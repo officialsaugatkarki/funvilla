@@ -47,6 +47,15 @@ const config: CapacitorConfig = {
     // Capture console.log from WebView into Android logcat
     loggingBehavior: 'debug',
   },
+
+  ios: {
+    // Disable WebView bounce/overscroll effect
+    scrollEnabled: false,
+    // Disable long-press link previews
+    allowsLinkPreview: false,
+    // Ensure content stays within safe area boundaries natively
+    contentInset: 'always',
+  },
 }
 
 export default config
