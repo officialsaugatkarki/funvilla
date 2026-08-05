@@ -90,7 +90,7 @@ function buildReceiptLines(order: any, paymentMethod: string, taxRate: number, s
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Build a complete printable HTML page
+// Build a complete printable HTML page using the perfect canvas image format
 // ─────────────────────────────────────────────────────────────────────────────
 export function buildReceiptHtml(
   order: any,
@@ -100,7 +100,34 @@ export function buildReceiptHtml(
 ): string {
   if (!order) return ''
   const lines = buildReceiptLines(order, paymentMethod, taxRate, serviceChargeRate)
-  const text = lines.join('\n')
+  
+  // Create a canvas
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return ''
+  
+  // Set dimensions (384px is typical 58mm printer width at 8 dots/mm)
+  const fontSize = 18 
+  const lineHeight = 22
+  const padding = 12
+  
+  canvas.width = 384 
+  canvas.height = (lines.length * lineHeight) + (padding * 2)
+  
+  // Draw background
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  
+  // Draw text
+  ctx.fillStyle = '#000000'
+  ctx.font = `bold ${fontSize}px "Courier New", Courier, monospace`
+  ctx.textBaseline = 'top'
+  
+  lines.forEach((line, index) => {
+    ctx.fillText(line, padding, padding + (index * lineHeight))
+  })
+  
+  const url = canvas.toDataURL('image/png')
 
   return `<!DOCTYPE html>
 <html>
@@ -110,36 +137,22 @@ export function buildReceiptHtml(
   <style>
     @page {
       size: 58mm auto;
-      margin: 1mm 2mm;
+      margin: 0;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
       width: 58mm;
       background: #fff;
-      color: #000;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
     }
-    pre {
-      font-family: "Courier New", "Courier", monospace;
-      font-size: 11.5px; /* Scaled up to perfectly fill 58mm width for 31 chars */
-      font-weight: bold;
-      line-height: 1.35;
-      white-space: pre;
-      word-break: normal;
-      overflow: hidden;
-      color: #000;
+    img {
+      width: 100%;
+      height: auto;
+      display: block;
     }
   </style>
 </head>
 <body>
-<pre>${text}</pre>
-<script>
-  window.onload = function() {
-    window.print();
-    setTimeout(function() { window.close(); }, 1000);
-  };
-</script>
+<img src="${url}" onload="window.print(); setTimeout(function() { window.close(); }, 1000);" />
 </body>
 </html>`
 }
