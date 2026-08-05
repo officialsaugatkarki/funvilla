@@ -90,21 +90,21 @@ function buildReceiptLines(order: any, paymentMethod: string, taxRate: number, s
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Build a complete printable HTML page using the perfect canvas image format
+// Print receipt directly via hidden iframe using the perfect canvas image format
 // ─────────────────────────────────────────────────────────────────────────────
-export function buildReceiptHtml(
+export function printReceiptImageDirectly(
   order: any,
   paymentMethod: string,
   taxRate: number,
   serviceChargeRate: number = 0
-): string {
-  if (!order) return ''
+): void {
+  if (!order) return
   const lines = buildReceiptLines(order, paymentMethod, taxRate, serviceChargeRate)
   
   // Create a canvas
   const canvas = document.createElement('canvas')
   const ctx = canvas.getContext('2d')
-  if (!ctx) return ''
+  if (!ctx) return
   
   // Set dimensions (384px is typical 58mm printer width at 8 dots/mm)
   const fontSize = 18 
@@ -129,32 +129,58 @@ export function buildReceiptHtml(
   
   const url = canvas.toDataURL('image/png')
 
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Receipt - ${order.order_number || ''}</title>
-  <style>
-    @page {
-      size: 58mm auto;
-      margin: 0;
+  // Create a hidden iframe for printing
+  const iframe = document.createElement('iframe')
+  iframe.style.position = 'fixed'
+  iframe.style.right = '0'
+  iframe.style.bottom = '0'
+  iframe.style.width = '0'
+  iframe.style.height = '0'
+  iframe.style.border = 'none'
+  document.body.appendChild(iframe)
+
+  const doc = iframe.contentWindow?.document
+  if (!doc) return
+
+  doc.open()
+  doc.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Receipt - ${order.order_number || ''}</title>
+      <style>
+        @page {
+          margin: 0;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body {
+          width: 100%;
+          background: #fff;
+          display: flex;
+          justify-content: center;
+        }
+        img {
+          width: 100%;
+          max-width: 384px; /* Matches the canvas width so it doesn't get pixelated */
+          height: auto;
+          display: block;
+        }
+      </style>
+    </head>
+    <body>
+      <img src="${url}" onload="window.print();" />
+    </body>
+    </html>
+  `)
+  doc.close()
+
+  // Clean up iframe after a delay to ensure printing dialog has opened
+  setTimeout(() => {
+    if (document.body.contains(iframe)) {
+      document.body.removeChild(iframe)
     }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body {
-      width: 58mm;
-      background: #fff;
-    }
-    img {
-      width: 100%;
-      height: auto;
-      display: block;
-    }
-  </style>
-</head>
-<body>
-<img src="${url}" onload="window.print(); setTimeout(function() { window.close(); }, 1000);" />
-</body>
-</html>`
+  }, 10000)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
