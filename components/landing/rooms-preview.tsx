@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { Wifi, Tv, Wind, Fan } from 'lucide-react'
 import { Canvas } from '@react-three/fiber'
-import { OrbitControls, useGLTF, Environment, Bounds } from '@react-three/drei'
+import { OrbitControls, useGLTF, Environment } from '@react-three/drei'
 import { RoomBookingForm } from './room-booking-form'
 
 function Model({ url }: { url: string }) {
@@ -86,14 +86,12 @@ export function RoomsPreview() {
           >
             {/* 3D Model Viewer */}
             <div className="relative w-full sm:w-2/5 aspect-[16/10] sm:aspect-auto overflow-hidden bg-gray-50/50 flex items-center justify-center">
-              <Canvas camera={{ position: [0, 2, 5], fov: 45 }} frameloop="demand">
+              <Canvas camera={{ position: [0, 1.5, 4], fov: 65, near: 0.1 }} frameloop="demand">
                 <ambientLight intensity={1} />
                 <directionalLight position={[10, 10, 5]} intensity={1} />
                 <Environment preset="city" />
                 <Suspense fallback={null}>
-                  <Bounds fit clip observe margin={1.2}>
-                    <Model url={room.model} />
-                  </Bounds>
+                  <Model url={room.model} />
                 </Suspense>
                 <OrbitControls makeDefault enableZoom={false} autoRotate={false} />
               </Canvas>
