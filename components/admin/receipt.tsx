@@ -90,97 +90,18 @@ function buildReceiptLines(order: any, paymentMethod: string, taxRate: number, s
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Print receipt directly via hidden iframe using the perfect canvas image format
+// printReceiptImageDirectly — DISABLED
+// window.print() / browser print dialogs are never used.
+// All printing goes through Supabase relay → Android POS → ESC/POS printer.
+// This function is kept as a no-op so existing call sites don't break.
 // ─────────────────────────────────────────────────────────────────────────────
 export function printReceiptImageDirectly(
-  order: any,
-  paymentMethod: string,
-  taxRate: number,
-  serviceChargeRate: number = 0
+  _order: any,
+  _paymentMethod: string,
+  _taxRate: number,
+  _serviceChargeRate: number = 0
 ): void {
-  if (!order) return
-  const lines = buildReceiptLines(order, paymentMethod, taxRate, serviceChargeRate)
-  
-  // Create a canvas
-  const canvas = document.createElement('canvas')
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return
-  
-  // Set dimensions (384px is typical 58mm printer width at 8 dots/mm)
-  const fontSize = 18 
-  const lineHeight = 22
-  const padding = 12
-  
-  canvas.width = 384 
-  canvas.height = (lines.length * lineHeight) + (padding * 2)
-  
-  // Draw background
-  ctx.fillStyle = '#ffffff'
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
-  
-  // Draw text
-  ctx.fillStyle = '#000000'
-  ctx.font = `bold ${fontSize}px "Courier New", Courier, monospace`
-  ctx.textBaseline = 'top'
-  
-  lines.forEach((line, index) => {
-    ctx.fillText(line, padding, padding + (index * lineHeight))
-  })
-  
-  const url = canvas.toDataURL('image/png')
-
-  // Create a hidden iframe for printing
-  const iframe = document.createElement('iframe')
-  iframe.style.position = 'fixed'
-  iframe.style.right = '0'
-  iframe.style.bottom = '0'
-  iframe.style.width = '0'
-  iframe.style.height = '0'
-  iframe.style.border = 'none'
-  document.body.appendChild(iframe)
-
-  const doc = iframe.contentWindow?.document
-  if (!doc) return
-
-  doc.open()
-  doc.write(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <title>Receipt - ${order.order_number || ''}</title>
-      <style>
-        @page {
-          margin: 0;
-        }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body {
-          width: 100%;
-          background: #fff;
-          display: flex;
-          justify-content: center;
-        }
-        img {
-          width: 100%;
-          max-width: 384px; /* Matches the canvas width so it doesn't get pixelated */
-          height: auto;
-          display: block;
-        }
-      </style>
-    </head>
-    <body>
-      <img src="${url}" onload="window.print();" />
-    </body>
-    </html>
-  `)
-  doc.close()
-
-  // Clean up iframe after a delay to ensure printing dialog has opened
-  setTimeout(() => {
-    if (document.body.contains(iframe)) {
-      document.body.removeChild(iframe)
-    }
-  }, 10000)
+  console.warn('[receipt] printReceiptImageDirectly is disabled — use printReceipt() from print-bridge instead')
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

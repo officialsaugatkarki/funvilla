@@ -2,23 +2,18 @@
  * thermal-plugin.ts
  *
  * TypeScript wrapper around the native Capacitor ThermalPrinterPlugin.
- * Keeps all Capacitor-specific imports isolated here so the rest of
- * the codebase never imports from '@capacitor/core' directly.
+ *
+ * IMPORTANT: Capacitor bridge is injected asynchronously into the WebView.
+ * Never import Capacitor at module load time — always check lazily at runtime.
  */
 
-import type { ReceiptOrder } from './escpos-formatter'
-import { Capacitor } from '@capacitor/core'
-
 export interface PrintReceiptOptions {
-  order: ReceiptOrder
+  order: any
   paymentMethod: string
   taxRate: number
   serviceChargeRate?: number
-  /** 58 | 80  — paper width in mm. Defaults to 80. */
   paperWidth?: 58 | 80
-  /** Printer IP address. Defaults to 192.168.1.127 */
   printerIp?: string
-  /** Printer port. Defaults to 9100 */
   printerPort?: number
 }
 
@@ -28,43 +23,87 @@ export interface PrintResult {
 }
 
 /**
- * Call the native ThermalPrinterPlugin from Kotlin.
- * Only works inside the Android Capacitor shell.
- * Throws if called from a plain browser (no Capacitor runtime).
- */
-export async function nativePrintReceipt(
-  options: PrintReceiptOptions
-): Promise<PrintResult> {
-  // Lazy-import Capacitor so this file is safe to import on the server
-  // (it won't explode during Next.js SSR builds)
-  const { Capacitor, registerPlugin } = await import('@capacitor/core')
-
-  if (!Capacitor.isNativePlatform()) {
-    throw new Error('nativePrintReceipt: not running on a native platform')
-  }
-
-  // Register the plugin by name — must match the plugin registered in MainActivity.kt
-  const ThermalPrinter = registerPlugin<{
-    printReceipt(opts: PrintReceiptOptions): Promise<PrintResult>
-  }>('ThermalPrinter')
-
-  return ThermalPrinter.printReceipt({
-    printerIp: '192.168.1.127',
-    printerPort: 9100,
-    paperWidth: 80,
-    ...options,
-  })
-}
-
-/**
- * Returns true if the app is running inside the Capacitor Android shell.
- * Safe to call during SSR (returns false).
+ * Returns true ONLY when running inside the Capacitor Android native shell.
+ *
+ * We check LAZILY at runtime — never at import time — because the Capacitor
+ * bridge is injected by the native WebView AFTER JavaScript modules are
+ * evaluated.
+ *
+ * We check three ways in priority order:
+ *  1. window.Capacitor.isNativePlatform() — the raw runtime bridge
+ *  2. window.Capacitor.getPlatform() === 'android'
+ *  3. The localStorage POS_MODE flag (for browser-based debugging)
  */
 export function isNativeAndroid(): boolean {
   if (typeof window === 'undefined') return false
   try {
-    return Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android'
+    const cap = (window as any).Capacitor
+    if (cap && typeof cap.isNativePlatform === 'function') {
+      return cap.isNativePlatform() === true && cap.getPlatform?.() === 'android'
+    }
+    return false
   } catch {
     return false
+  }
+}
+
+/**
+ * Returns true if this device is in "POS Worker Mode".
+ * This is true when:
+ *  - Running as native Android Capacitor APK, OR
+ *  - The user has manually enabled POS mode via the Diagnostics page
+ *    (stored in localStorage, for browser-based POS tablets)
+ */
+export function isPOSWorkerMode(): boolean {
+  if (typeof window === 'undefined') return false
+  if (isNativeAndroid()) return true
+  try {
+    return localStorage.getItem('pos_worker_mode') === 'true'
+  } catch {
+    return false
+  }
+}
+
+export function enablePOSWorkerMode() {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('pos_worker_mode', 'true')
+    console.log('[POS] POS Worker Mode enabled in localStorage')
+  }
+}
+
+export function disablePOSWorkerMode() {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('pos_worker_mode')
+    console.log('[POS] POS Worker Mode disabled')
+  }
+}
+
+/**
+ * Calls the native Capacitor ThermalPrinterPlugin.
+ * Only works inside the Android Capacitor APK.
+ */
+export async function nativePrintReceipt(
+  options: PrintReceiptOptions
+): Promise<PrintResult> {
+  const cap = (window as any).Capacitor
+  if (!cap || !cap.isNativePlatform()) {
+    return { success: false, error: 'Not running in native Capacitor app' }
+  }
+
+  try {
+    const { registerPlugin } = await import('@capacitor/core')
+
+    const ThermalPrinter = registerPlugin<{
+      printReceipt(opts: PrintReceiptOptions): Promise<PrintResult>
+    }>('ThermalPrinter')
+
+    return await ThermalPrinter.printReceipt({
+      printerIp: '192.168.1.127',
+      printerPort: 9100,
+      paperWidth: 80,
+      ...options,
+    })
+  } catch (e: any) {
+    return { success: false, error: e?.message ?? 'Plugin call failed' }
   }
 }
