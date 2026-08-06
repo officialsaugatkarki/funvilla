@@ -96,6 +96,53 @@ export default function POSClient({
 
     console.log('[Print Worker] Initialized on Android POS')
     const supabase = createClient()
+    
+    // Process a single job
+    const processJob = async (job: any) => {
+      console.log('[Print Worker] Processing print job:', job.id)
+      // 1. Claim the job
+      await updatePrintJobStatus(job.id, 'processing')
+
+      // 2. Print via local TCP
+      try {
+        const result = await nativePrintReceipt({
+          order: job.order_data,
+          paymentMethod: job.payment_method,
+          taxRate: job.tax_rate,
+          serviceChargeRate: job.service_charge_rate,
+          paperWidth: job.paper_width,
+          printerIp: '192.168.1.127',
+          printerPort: 9100,
+        })
+
+        if (result.success) {
+          console.log('[Print Worker] Print success:', job.id)
+          await updatePrintJobStatus(job.id, 'completed')
+          toast.success(`Remote receipt printed successfully!`)
+        } else {
+          console.error('[Print Worker] Print failed:', result.error)
+          await updatePrintJobStatus(job.id, 'failed', result.error)
+          toast.error(`Remote print failed: ${result.error}`)
+        }
+      } catch (err: any) {
+        console.error('[Print Worker] Exception during print:', err)
+        await updatePrintJobStatus(job.id, 'failed', err?.message || 'Unknown exception')
+      }
+    }
+
+    // A. Check for any missed pending jobs immediately on startup
+    const checkPending = async () => {
+      const { data } = await supabase.from('print_jobs').select('*').eq('status', 'pending')
+      if (data && data.length > 0) {
+        console.log(`[Print Worker] Found ${data.length} pending jobs on startup`)
+        for (const job of data) {
+          await processJob(job)
+        }
+      }
+    }
+    checkPending()
+
+    // B. Listen for real-time new jobs
     const channel = supabase.channel('pos-print-worker')
       .on('postgres_changes', { 
         event: 'INSERT', 
@@ -103,35 +150,7 @@ export default function POSClient({
         table: 'print_jobs',
         filter: 'status=eq.pending'
       }, async (payload: any) => {
-        const job = payload.new
-        console.log('[Print Worker] Received new print job:', job.id)
-        
-        // 1. Claim the job
-        await updatePrintJobStatus(job.id, 'processing')
-
-        // 2. Print via local TCP
-        try {
-          const result = await nativePrintReceipt({
-            order: job.order_data,
-            paymentMethod: job.payment_method,
-            taxRate: job.tax_rate,
-            serviceChargeRate: job.service_charge_rate,
-            paperWidth: job.paper_width,
-            printerIp: '192.168.1.127',
-            printerPort: 9100,
-          })
-
-          if (result.success) {
-            console.log('[Print Worker] Print success:', job.id)
-            await updatePrintJobStatus(job.id, 'completed')
-          } else {
-            console.error('[Print Worker] Print failed:', result.error)
-            await updatePrintJobStatus(job.id, 'failed', result.error)
-          }
-        } catch (err: any) {
-          console.error('[Print Worker] Exception during print:', err)
-          await updatePrintJobStatus(job.id, 'failed', err?.message || 'Unknown exception')
-        }
+        await processJob(payload.new)
       })
       .subscribe()
 
