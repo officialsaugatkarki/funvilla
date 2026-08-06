@@ -131,12 +131,21 @@ class ThermalPrinterPlugin : Plugin() {
         val orderNumber = orderObj.optString("order_number", "-")
         val orderType   = (orderObj.optString("order_type", "dine_in")).replace("_", " ")
 
+        // Extract table number — check nested restaurant_tables object first, then flat field
+        val tableNumber = run {
+            val nested = orderObj.optJSONObject("restaurant_tables")
+            nested?.optString("table_number", "")
+                ?.takeIf { it.isNotBlank() }
+                ?: orderObj.optString("table_number", "")
+        }
+
         // Build ESC/POS bytes
         val receiptBytes = EscPosHelper.buildReceipt(
             orderNumber  = orderNumber,
             orderDate    = dateStr,
             orderTime    = timeStr,
             orderType    = orderType,
+            tableNumber  = tableNumber,
             paymentMethod = payMethod,
             items        = items,
             subtotal     = subtotal,

@@ -16,6 +16,8 @@ export interface ReceiptOrder {
   order_number?: string
   created_at?: string
   order_type?: string
+  restaurant_tables?: { table_number?: string }
+  table_number?: string
   items?: OrderItem[]
   order_items?: Array<{ menu_item_name: string; quantity: number; unit_price: number }>
   subtotal?: number
@@ -120,12 +122,15 @@ export function formatReceipt(
     '',
   ]
 
+  const tableNumber = order.restaurant_tables?.table_number ?? order.table_number
+
   const metaSection: string[] = [
     divider('-', W),
     labelRow('Invoice', order.order_number || '-', W),
     labelRow('Date', dateStr, W),
     labelRow('Time', timeStr, W),
     labelRow('Type', orderType, W),
+    ...(tableNumber ? [labelRow('Table', tableNumber, W)] : []),
     labelRow('Payment', paymentMethod, W),
     divider('-', W),
   ]
