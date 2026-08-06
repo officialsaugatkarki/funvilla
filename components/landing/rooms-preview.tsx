@@ -6,11 +6,95 @@ import { motion } from 'framer-motion'
 import { Wifi, Tv, Wind, Fan } from 'lucide-react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, useGLTF, Environment } from '@react-three/drei'
+import * as THREE from 'three'
 import { RoomBookingForm } from './room-booking-form'
 
-function Model({ url }: { url: string }) {
+// ─────────────────────────────────────────────────────────────────────────────
+// ROOT CAUSE #2 FIX: Deep-clone geometry so two canvases never share the same
+// ArrayBuffers. `scene.clone()` is a shallow clone — geometry attribute buffers
+// (position, UV) remain shared. On mobile, two WebGL contexts uploading the
+// SAME ArrayBuffer concurrently causes GPU data corruption / fragmentation.
+// ─────────────────────────────────────────────────────────────────────────────
+function deepCloneScene(scene: THREE.Group): THREE.Group {
+  const clone = scene.clone(true)
+  clone.traverse((node) => {
+    const mesh = node as THREE.Mesh
+    if (mesh.isMesh && mesh.geometry) {
+      mesh.geometry = mesh.geometry.clone()
+    }
+  })
+  return clone
+}
+
+function Model({ url, isMobile }: { url: string; isMobile: boolean }) {
   const { scene } = useGLTF(url)
-  const clonedScene = useMemo(() => scene.clone(), [scene])
+
+  // Deep clone — geometry ArrayBuffers are NOT shared between canvases
+  const clonedScene = useMemo(
+    () => deepCloneScene(scene as unknown as THREE.Group),
+    [scene]
+  )
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // ROOT CAUSE #1 FIX (mobile-only): Both GLBs use UNSIGNED_INT (32-bit)
+  // index buffers with 87k–125k vertices. On WebGL1 Android devices that lack
+  // the OES_element_index_uint extension, indices beyond 65535 silently wrap,
+  // sending vertices to wrong positions → the "shattered polygon" look.
+  //
+  // Fix: re-index geometry into Uint16 chunks (≤65535 unique vertices each)
+  // only on mobile. Desktop geometry is untouched.
+  // ─────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isMobile) return
+
+    clonedScene.traverse((node) => {
+      const mesh = node as THREE.Mesh
+      if (!mesh.isMesh || !mesh.geometry) return
+
+      const geo = mesh.geometry
+      const indexAttr = geo.index
+
+      // Only patch Uint32 index buffers (which need OES_element_index_uint)
+      if (!indexAttr || !(indexAttr.array instanceof Uint32Array)) return
+
+      const srcIndices = indexAttr.array as Uint32Array
+      const posAttr = geo.attributes.position as THREE.BufferAttribute
+      const uvAttr = geo.attributes.uv as THREE.BufferAttribute
+
+      // Remap: visit each referenced vertex once, build compact Uint16-safe buffers
+      const CHUNK = 65535
+      const vertexMap = new Map<number, number>()
+      const newPos: number[] = []
+      const newUV: number[] = []
+      const newIdx: number[] = []
+
+      for (let i = 0; i < srcIndices.length; i++) {
+        const orig = srcIndices[i]
+        if (!vertexMap.has(orig)) {
+          const next = newPos.length / 3
+          vertexMap.set(orig, next)
+          newPos.push(posAttr.getX(orig), posAttr.getY(orig), posAttr.getZ(orig))
+          if (uvAttr) newUV.push(uvAttr.getX(orig), uvAttr.getY(orig))
+        }
+        newIdx.push(vertexMap.get(orig)!)
+      }
+
+      // Replace attributes in-place
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(newPos, 3))
+      if (newUV.length) geo.setAttribute('uv', new THREE.Float32BufferAttribute(newUV, 2))
+
+      // Use Uint16 if we fit, otherwise keep Uint32 (WebGL2 supports it natively)
+      const IndexCtor = newPos.length / 3 <= 65535 ? Uint16Array : Uint32Array
+      geo.setIndex(new THREE.BufferAttribute(new IndexCtor(newIdx), 1))
+      geo.computeVertexNormals()
+
+      // Make double-sided: photogrammetry meshes have no exterior normals;
+      // on mobile the culling threshold differs and faces go missing
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+      mats.forEach((m) => { if (m) m.side = THREE.DoubleSide })
+    })
+  }, [clonedScene, isMobile])
+
   return <primitive object={clonedScene} scale={1.5} position={[0, -1, 0]} />
 }
 
@@ -41,7 +125,7 @@ const rooms = [
     ]
   },
   {
-    id: '4df76b86-defa-4967-b8fb-f97653215847', // Using the same room_type_id
+    id: '4df76b86-defa-4967-b8fb-f97653215847',
     name: 'Standard Room',
     model: '/models/model1.glb',
     description: 'Cozy standard non-ac room (Room 103)',
@@ -58,16 +142,10 @@ export function RoomsPreview() {
   const [isMobile, setIsMobile] = useState(false)
 
   useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768)
-    }
-    
-    // Initial check
-    checkMobile()
-    
-    // Optional: Update on resize if device orientation changes
-    window.addEventListener('resize', checkMobile)
-    return () => window.removeEventListener('resize', checkMobile)
+    const check = () => setIsMobile(window.innerWidth < 768)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
   }, [])
 
   return (
@@ -101,22 +179,31 @@ export function RoomsPreview() {
           >
             {/* 3D Model Viewer */}
             <div className="relative w-full sm:w-2/5 aspect-[16/10] sm:aspect-auto overflow-hidden bg-gray-50/50 flex items-center justify-center">
-              <Canvas 
-                camera={{ position: [0, 1.5, 4], fov: 65, near: 0.1, far: 1000 }} 
+              <Canvas
+                camera={{ position: [0, 1.5, 4], fov: 65, near: 0.1, far: 1000 }}
                 frameloop="demand"
-                dpr={isMobile ? Math.min(typeof window !== 'undefined' ? window.devicePixelRatio : 1, 2) : (typeof window !== 'undefined' ? window.devicePixelRatio : 1)}
-                gl={isMobile ? { 
-                  precision: 'highp', 
-                  powerPreference: 'high-performance', 
-                  antialias: false, 
-                  preserveDrawingBuffer: true 
+                // ── MOBILE-ONLY renderer overrides (desktop = undefined = default) ──
+                // precision:'highp'   → forces 32-bit float vertex math on Android
+                //                       (Mali/Adreno default to mediump → coord snapping)
+                // antialias:false     → saves 4× GPU memory bandwidth on mobile
+                // preserveDrawingBuffer → stabilises frame output on old GPUs
+                // powerPreference     → requests the high-perf GPU on dual-GPU phones
+                // dpr clamped to 2    → prevents DPR-3/4 devices overflowing VRAM
+                dpr={isMobile
+                  ? Math.min(typeof window !== 'undefined' ? window.devicePixelRatio : 1, 2)
+                  : undefined}
+                gl={isMobile ? {
+                  precision: 'highp',
+                  powerPreference: 'high-performance',
+                  antialias: false,
+                  preserveDrawingBuffer: true,
                 } : undefined}
               >
                 <ambientLight intensity={1} />
                 <directionalLight position={[10, 10, 5]} intensity={1} />
                 <Environment preset="city" />
                 <Suspense fallback={null}>
-                  <Model url={room.model} />
+                  <Model url={room.model} isMobile={isMobile} />
                 </Suspense>
                 <OrbitControls makeDefault enableZoom={false} autoRotate={false} />
               </Canvas>
