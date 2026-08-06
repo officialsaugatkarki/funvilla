@@ -44,7 +44,7 @@ export function Footer() {
           {/* Map — h-[220px] (was 300px) */}
           <div className="h-[220px] w-full rounded-2xl overflow-hidden bg-white/10 relative">
             <iframe
-              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d113063.13601556073!2d84.95470656641217!3d27.443725597920364!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x39eb49018dc3b5c7%3A0x6d2c0b6b06e8b2b!2sHetauda!5e0!3m2!1sen!2snp!4v1700000000000!5m2!1sen!2snp"
+              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3542.025617406661!2d85.04950377662523!3d27.406130238710208!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x39eb490048c4724d%3A0x9d4197adc5372a37!2sKhukuri%20Restaurent%20and%20Fun%20Villla!5e0!3m2!1sen!2snp!4v1786000609072!5m2!1sen!2snp"
               width="100%"
               height="100%"
               style={{ border: 0 }}
