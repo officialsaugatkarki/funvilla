@@ -7,6 +7,7 @@
  */
 
 import type { ReceiptOrder } from './escpos-formatter'
+import { Capacitor } from '@capacitor/core'
 
 export interface PrintReceiptOptions {
   order: ReceiptOrder
@@ -62,8 +63,7 @@ export async function nativePrintReceipt(
 export function isNativeAndroid(): boolean {
   if (typeof window === 'undefined') return false
   try {
-    // @ts-ignore — Capacitor injects itself on window when running natively
-    return !!(window.Capacitor?.isNativePlatform?.())
+    return Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android'
   } catch {
     return false
   }
