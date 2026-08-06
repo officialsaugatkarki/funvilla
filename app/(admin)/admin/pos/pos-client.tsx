@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
@@ -366,10 +366,22 @@ export default function POSClient({
               <SelectValue placeholder="Select table *" />
             </SelectTrigger>
             <SelectContent>
-              {tables.filter(t => t.status !== 'occupied').map(t => (
-                <SelectItem key={t.id} value={t.id}>
-                  {t.table_number} ({t.capacity} seats)
-                </SelectItem>
+              {Object.entries(
+                tables.filter(t => t.status !== 'occupied').reduce((acc, t) => {
+                  const section = t.section || 'Other Areas'
+                  if (!acc[section]) acc[section] = []
+                  acc[section].push(t)
+                  return acc
+                }, {} as Record<string, any[]>)
+              ).map(([section, sectionTables]) => (
+                <SelectGroup key={section}>
+                  <SelectLabel className="bg-muted/50 text-muted-foreground uppercase text-[10px] tracking-wider px-2 py-1.5 mb-1">{section}</SelectLabel>
+                  {(sectionTables as any[]).map((t: any) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.table_number} ({t.capacity} seats)
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
               ))}
             </SelectContent>
           </Select>
