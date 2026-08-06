@@ -80,7 +80,7 @@ export function RoomsPreview() {
 
   return (
     <section id="rooms" className="py-14">
-      <div className="flex flex-col md:flex-row justify-between items-end gap-4 mb-8">
+      <div className="flex flex-col md:flex-row justify-between items-center md:items-end gap-6 mb-10 text-center md:text-left">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-widest text-accent mb-2">Rooms &amp; Stay</p>
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-serif text-primary leading-[1.1]">
