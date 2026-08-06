@@ -169,14 +169,7 @@ export default function POSClient({
       }, async (payload: any) => {
         await processJob(payload.new)
       })
-      .subscribe((status: string, err?: Error) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('[Print Worker] Realtime subscribed successfully')
-        } else {
-          console.error('[Print Worker] Realtime subscription error:', status, err)
-          setPrintServerStatus('error')
-        }
-      })
+      .subscribe()
 
     return () => { supabase.removeChannel(channel) }
   }, [])
