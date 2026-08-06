@@ -157,27 +157,28 @@ class ThermalPrinterPlugin : Plugin() {
             for (attempt in 0..MAX_RETRIES) {
                 try {
                     val localIp = getLocalIpAddress()
-                    if (localIp == "Unknown") {
-                        throw java.net.ConnectException("Tablet has no IPv4 network connection. Wi-Fi may be authenticating.")
-                    }
 
-                    if (!isSameSubnet(localIp, printerIp)) {
-                        throw java.net.ConnectException("Tablet is on a different network (Tablet IP: $localIp, Printer: $printerIp). Ensure the Play Area AP is in Bridge Mode.")
-                    }
+                    // Log diagnostic info but do NOT block — attempt connection regardless of subnet
+                    val sameSubnet = isSameSubnet(localIp, printerIp)
+                    android.util.Log.d("ThermalPrinter",
+                        "Attempt ${attempt + 1}/$MAX_RETRIES | " +
+                        "Tablet IP: $localIp | Printer: $printerIp:$printerPort | " +
+                        "Same subnet: $sameSubnet"
+                    )
 
                     sendToPrinter(printerIp, printerPort, receiptBytes)
                     success = true
                     break
                 } catch (e: java.net.SocketTimeoutException) {
-                    lastError = "Printer offline or timed out. Check that it is powered on at $printerIp:$printerPort"
+                    lastError = "Printer offline or timed out. Make sure the printer is on and connected to the same network."
                 } catch (e: java.net.ConnectException) {
-                    lastError = e.message ?: "Cannot connect to printer at $printerIp:$printerPort."
+                    lastError = "Cannot reach printer at $printerIp:$printerPort. " +
+                        "If you are on 'Khukuri Restaurant' WiFi, ensure both routers share the same LAN."
                 } catch (e: Exception) {
                     lastError = "Print error: ${e.message}"
                 }
 
                 if (attempt < MAX_RETRIES) {
-                    // Exponential backoff
                     val delay = RETRY_DELAYS_MS.getOrElse(attempt) { 5000L }
                     Thread.sleep(delay)
                 }
