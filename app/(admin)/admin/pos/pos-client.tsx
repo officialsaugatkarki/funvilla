@@ -71,9 +71,12 @@ export default function POSClient({
   const [isReceiptOpen, setIsReceiptOpen] = useState(false)
   const [completedOrder, setCompletedOrder] = useState<any>(null)
 
-  // Discount
   const [discountValue, setDiscountValue] = useState<string>('')
   const [discountType, setDiscountType] = useState<'percent' | 'fixed'>('percent')
+
+  // Print Worker Status
+  const [printServerStatus, setPrintServerStatus] = useState<'offline' | 'online' | 'error' | 'relay'>('relay')
+  const [printWorkerError, setPrintWorkerError] = useState<string | null>(null)
 
   const [isPending, startTransition] = useTransition()
 
@@ -92,18 +95,20 @@ export default function POSClient({
 
   // Background Print Worker (Android Only)
   useEffect(() => {
-    if (!isNativeAndroid()) return // Only run on Android native POS tablet
+    if (!isNativeAndroid()) {
+      setPrintServerStatus('relay')
+      return // Only run on Android native POS tablet
+    }
 
+    setPrintServerStatus('online')
     console.log('[Print Worker] Initialized on Android POS')
     const supabase = createClient()
     
     // Process a single job
     const processJob = async (job: any) => {
       console.log('[Print Worker] Processing print job:', job.id)
-      // 1. Claim the job
       await updatePrintJobStatus(job.id, 'processing')
 
-      // 2. Print via local TCP
       try {
         const result = await nativePrintReceipt({
           order: job.order_data,
@@ -132,12 +137,24 @@ export default function POSClient({
 
     // A. Check for any missed pending jobs immediately on startup
     const checkPending = async () => {
-      const { data } = await supabase.from('print_jobs').select('*').eq('status', 'pending')
-      if (data && data.length > 0) {
-        console.log(`[Print Worker] Found ${data.length} pending jobs on startup`)
-        for (const job of data) {
-          await processJob(job)
+      try {
+        const { data, error } = await supabase.from('print_jobs').select('*').eq('status', 'pending')
+        if (error) {
+          console.error('[Print Worker] Error fetching pending jobs:', error)
+          setPrintServerStatus('error')
+          setPrintWorkerError(error.message)
+          return
         }
+        if (data && data.length > 0) {
+          console.log(`[Print Worker] Found ${data.length} pending jobs on startup`)
+          for (const job of data) {
+            await processJob(job)
+          }
+        }
+      } catch (err: any) {
+        console.error('[Print Worker] Catch error fetching jobs:', err)
+        setPrintServerStatus('error')
+        setPrintWorkerError(err.message)
       }
     }
     checkPending()
@@ -152,7 +169,14 @@ export default function POSClient({
       }, async (payload: any) => {
         await processJob(payload.new)
       })
-      .subscribe()
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('[Print Worker] Realtime subscribed successfully')
+        } else {
+          console.error('[Print Worker] Realtime subscription error:', status, err)
+          setPrintServerStatus('error')
+        }
+      })
 
     return () => { supabase.removeChannel(channel) }
   }, [])
@@ -292,10 +316,22 @@ export default function POSClient({
           <h2 className="font-semibold flex items-center gap-2 text-sm">
             <ListOrdered className="h-4 w-4 text-primary" /> Active Orders ({activeOrders.length})
           </h2>
-          <Button variant="outline" size="sm" onClick={() => setPosMode('new_order')} className="h-8">
-            <Plus className="h-3.5 w-3.5 mr-1" /> New Order
-          </Button>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 text-xs font-medium">
+              {printServerStatus === 'online' && <span className="text-emerald-600 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span> Print Server Active</span>}
+              {printServerStatus === 'relay' && <span className="text-muted-foreground">Print: Cloud Relay Mode</span>}
+              {printServerStatus === 'error' && <span className="text-destructive">Print Server Error!</span>}
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setPosMode('new_order')} className="h-8">
+              <Plus className="h-3.5 w-3.5 mr-1" /> New Order
+            </Button>
+          </div>
         </div>
+        {printWorkerError && (
+          <p className="text-xs text-destructive bg-destructive/10 p-2 rounded-md font-medium">
+            DB Error: {printWorkerError}
+          </p>
+        )}
       </div>
       
       <div className="flex-1 overflow-y-auto min-h-0">
