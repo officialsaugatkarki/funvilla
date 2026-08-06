@@ -378,7 +378,7 @@ export default function POSClient({
                   <SelectLabel className="bg-muted/50 text-muted-foreground uppercase text-[10px] tracking-wider px-2 py-1.5 mb-1">{section}</SelectLabel>
                   {(sectionTables as any[]).map((t: any) => (
                     <SelectItem key={t.id} value={t.id}>
-                      {t.table_number} ({t.capacity} seats)
+                      {t.table_number}
                     </SelectItem>
                   ))}
                 </SelectGroup>
