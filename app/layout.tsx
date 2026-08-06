@@ -3,6 +3,7 @@ import { playfair, inter } from './fonts'
 import { Analytics } from '@vercel/analytics/next'
 import { Toaster } from 'sonner'
 import { NativeProvider } from '@/components/providers/native-provider'
+import { PWAInstallPrompt } from '@/components/pwa-install-prompt'
 import './globals.css'
 
 export const viewport: Viewport = {
@@ -121,6 +122,7 @@ export default function RootLayout({
         <NativeProvider>
           {children}
           <Toaster richColors position="top-right" />
+          <PWAInstallPrompt />
           {process.env.NODE_ENV === 'production' && <Analytics />}
         </NativeProvider>
       </body>

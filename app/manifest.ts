@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: 'Khukuri Restaurant & Fun Villa',
     short_name: 'Khukuri',
     description: 'Experience authentic Nepali cuisine, premium luxury stays, and relaxing pool amenities at Khukuri Restaurant & Fun Villa.',
-    start_url: '/',
+    start_url: '/auth/login',
     display: 'standalone',
     background_color: '#FFFFFF',
     theme_color: '#FFFFFF',
