@@ -19,8 +19,8 @@ import { createOrder, processPayment, getActiveOrdersForPOS } from '@/lib/action
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { printReceipt } from '@/lib/printing/print-bridge'
-import { isNativeAndroid, nativePrintReceipt } from '@/lib/printing/thermal-plugin'
-import { updatePrintJobStatus } from '@/lib/actions/print.actions'
+import { isNativeAndroid } from '@/lib/printing/thermal-plugin'
+import { startPrintWorker, setPrintWorkerStatusCallback } from '@/lib/printing/print-worker'
 import { downloadReceiptImage } from '@/components/admin/receipt'
 
 interface CartItem {
@@ -93,85 +93,22 @@ export default function POSClient({
     return () => { supabase.removeChannel(channel) }
   }, [])
 
-  // Background Print Worker (Android Only)
+  // Background Print Worker (Android only)
+  // Starts once on mount, cleans up on unmount.
   useEffect(() => {
     if (!isNativeAndroid()) {
       setPrintServerStatus('relay')
-      return // Only run on Android native POS tablet
+      return
     }
 
-    setPrintServerStatus('online')
-    console.log('[Print Worker] Initialized on Android POS')
-    const supabase = createClient()
-    
-    // Process a single job
-    const processJob = async (job: any) => {
-      console.log('[Print Worker] Processing print job:', job.id)
-      await updatePrintJobStatus(job.id, 'processing')
+    // Wire status updates into React state
+    setPrintWorkerStatusCallback((status, message) => {
+      setPrintServerStatus(status)
+      if (message) setPrintWorkerError(message)
+    })
 
-      try {
-        const result = await nativePrintReceipt({
-          order: job.order_data,
-          paymentMethod: job.payment_method,
-          taxRate: job.tax_rate,
-          serviceChargeRate: job.service_charge_rate,
-          paperWidth: job.paper_width,
-          printerIp: '192.168.1.127',
-          printerPort: 9100,
-        })
-
-        if (result.success) {
-          console.log('[Print Worker] Print success:', job.id)
-          await updatePrintJobStatus(job.id, 'completed')
-          toast.success(`Remote receipt printed successfully!`)
-        } else {
-          console.error('[Print Worker] Print failed:', result.error)
-          await updatePrintJobStatus(job.id, 'failed', result.error)
-          toast.error(`Remote print failed: ${result.error}`)
-        }
-      } catch (err: any) {
-        console.error('[Print Worker] Exception during print:', err)
-        await updatePrintJobStatus(job.id, 'failed', err?.message || 'Unknown exception')
-      }
-    }
-
-    // A. Check for any missed pending jobs immediately on startup
-    const checkPending = async () => {
-      try {
-        const { data, error } = await supabase.from('print_jobs').select('*').eq('status', 'pending')
-        if (error) {
-          console.error('[Print Worker] Error fetching pending jobs:', error)
-          setPrintServerStatus('error')
-          setPrintWorkerError(error.message)
-          return
-        }
-        if (data && data.length > 0) {
-          console.log(`[Print Worker] Found ${data.length} pending jobs on startup`)
-          for (const job of data) {
-            await processJob(job)
-          }
-        }
-      } catch (err: any) {
-        console.error('[Print Worker] Catch error fetching jobs:', err)
-        setPrintServerStatus('error')
-        setPrintWorkerError(err.message)
-      }
-    }
-    checkPending()
-
-    // B. Listen for real-time new jobs
-    const channel = supabase.channel('pos-print-worker')
-      .on('postgres_changes', { 
-        event: 'INSERT', 
-        schema: 'public', 
-        table: 'print_jobs',
-        filter: 'status=eq.pending'
-      }, async (payload: any) => {
-        await processJob(payload.new)
-      })
-      .subscribe()
-
-    return () => { supabase.removeChannel(channel) }
+    const stop = startPrintWorker()
+    return stop
   }, [])
 
   const filtered = items.filter(item => {
