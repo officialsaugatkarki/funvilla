@@ -3,6 +3,44 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ── PWA / Mobile Native UX ─────────────────────────────────────────────── */
+html,
+body {
+  /* Prevent the elastic "rubber-band" overscroll effect on iOS Safari */
+  overscroll-behavior-y: none;
+  /* Prevent horizontal scroll bleed */
+  overflow-x: hidden;
+  /* Enable smooth momentum scrolling on iOS */
+  -webkit-overflow-scrolling: touch;
+}
+
+body {
+  /* Remove the grey tap-highlight flash on iOS */
+  -webkit-tap-highlight-color: transparent;
+  /* Prevent the 300ms tap delay */
+  touch-action: manipulation;
+  /* Support iPhone notch / Dynamic Island safe area insets */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* Disable text selection in standalone PWA mode (feels more native) */
+@media all and (display-mode: standalone) {
+  body {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* But allow text selection inside text inputs, textareas, and content areas */
+  input, textarea, [contenteditable], article, p {
+    user-select: text;
+    -webkit-user-select: text;
+  }
+}
+
+
 :root {
   /* Premium Hospitality Colors */
   --background: #F9F8F6; /* Warm White */
