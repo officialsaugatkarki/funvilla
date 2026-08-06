@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useMemo } from 'react'
+import { Suspense, useMemo, useState, useEffect } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { Wifi, Tv, Wind, Fan } from 'lucide-react'
@@ -55,6 +55,21 @@ const rooms = [
 ]
 
 export function RoomsPreview() {
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+    
+    // Initial check
+    checkMobile()
+    
+    // Optional: Update on resize if device orientation changes
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
   return (
     <section id="rooms" className="py-14">
       {/* Header */}
@@ -86,7 +101,17 @@ export function RoomsPreview() {
           >
             {/* 3D Model Viewer */}
             <div className="relative w-full sm:w-2/5 aspect-[16/10] sm:aspect-auto overflow-hidden bg-gray-50/50 flex items-center justify-center">
-              <Canvas camera={{ position: [0, 1.5, 4], fov: 65, near: 0.1 }} frameloop="demand">
+              <Canvas 
+                camera={{ position: [0, 1.5, 4], fov: 65, near: 0.1, far: 1000 }} 
+                frameloop="demand"
+                dpr={isMobile ? Math.min(typeof window !== 'undefined' ? window.devicePixelRatio : 1, 2) : (typeof window !== 'undefined' ? window.devicePixelRatio : 1)}
+                gl={isMobile ? { 
+                  precision: 'highp', 
+                  powerPreference: 'high-performance', 
+                  antialias: false, 
+                  preserveDrawingBuffer: true 
+                } : undefined}
+              >
                 <ambientLight intensity={1} />
                 <directionalLight position={[10, 10, 5]} intensity={1} />
                 <Environment preset="city" />
