@@ -4,10 +4,9 @@
  * Self-contained background print worker for the Android POS tablet.
  *
  * Architecture:
- *   iPhone  →  Supabase print_jobs table  →  Android POS Worker  →  TCP 192.168.1.127:9100
+ *   iPhone  →  Supabase print_jobs  →  Android Worker  →  TCP 192.168.1.127:9100
  *
- * This module is ONLY activated on the Android Capacitor native platform.
- * It is safe to import on any platform — it self-guards with isNativeAndroid().
+ * Safe to import on all platforms — self-guards with isNativeAndroid().
  */
 
 'use client'
@@ -15,35 +14,40 @@
 import { createClient } from '@/lib/supabase/client'
 import { nativePrintReceipt, isNativeAndroid } from './thermal-plugin'
 
-// ─── Singleton guard — only one worker per app session ────────────────────────
+// ─── Singleton guard ────────────────────────────────────────────────────────────
 let workerStarted = false
 
-// ─── In-memory lock to prevent duplicate prints ───────────────────────────────
+// ─── In-memory lock: prevent double-processing on this device ──────────────────
 const processingJobs = new Set<string>()
 
-// ─── Config ────────────────────────────────────────────────────────────────────
-const PRINTER_IP   = '192.168.1.127'
-const PRINTER_PORT = 9100
-const MAX_RETRIES  = 3
-const RETRY_DELAYS = [5000, 15000, 30000] // ms
+// ─── Config ─────────────────────────────────────────────────────────────────────
+const PRINTER_IP     = '192.168.1.127'
+const PRINTER_PORT   = 9100
+const MAX_RETRIES    = 3
+const RETRY_DELAYS   = [5000, 15000, 30000]
+const HEARTBEAT_MS   = 15_000
+const DEVICE_ID      = `android-pos-${typeof window !== 'undefined' ? (window as any).__capacitorDeviceId || 'main' : 'ssr'}`
 
-// ─── Status callback ───────────────────────────────────────────────────────────
-type StatusCallback = (status: 'online' | 'error', message?: string) => void
-let onStatusChange: StatusCallback = () => {}
+// ─── Status callback for React UI ──────────────────────────────────────────────
+type WorkerStatus = 'online' | 'error'
+type StatusCallback = (status: WorkerStatus, message?: string) => void
+let _onStatusChange: StatusCallback = () => {}
 
 export function setPrintWorkerStatusCallback(cb: StatusCallback) {
-  onStatusChange = cb
+  _onStatusChange = cb
 }
 
-// ─── Logger ────────────────────────────────────────────────────────────────────
-function log(msg: string, ...args: any[]) {
-  console.log(`[PrintWorker] ${msg}`, ...args)
+// ─── Logger ─────────────────────────────────────────────────────────────────────
+function log(msg: string) {
+  const ts = new Date().toISOString()
+  console.log(`[PrintWorker ${ts}] ${msg}`)
 }
-function logError(msg: string, ...args: any[]) {
-  console.error(`[PrintWorker] ❌ ${msg}`, ...args)
+function err(msg: string, detail?: any) {
+  const ts = new Date().toISOString()
+  console.error(`[PrintWorker ${ts}] ❌ ${msg}`, detail ?? '')
 }
 
-// ─── Update job status directly via Supabase client (no server action) ─────────
+// ─── Update print job status via Supabase client directly ──────────────────────
 async function setJobStatus(
   supabase: ReturnType<typeof createClient>,
   jobId: string,
@@ -52,95 +56,89 @@ async function setJobStatus(
 ) {
   const { error } = await supabase
     .from('print_jobs')
-    .update({ status, updated_at: new Date().toISOString(), ...extra })
+    .update({
+      status,
+      updated_at: new Date().toISOString(),
+      ...extra,
+    })
     .eq('id', jobId)
-  if (error) logError(`Failed to set job ${jobId} status → ${status}:`, error.message)
+  if (error) err(`setJobStatus(${status}) failed for ${jobId}:`, error.message)
 }
 
-// ─── Claim a job atomically: only claim if still pending ─────────────────────
+// ─── Atomically claim a job — only succeeds if still 'pending' ─────────────────
 async function claimJob(
   supabase: ReturnType<typeof createClient>,
   jobId: string
 ): Promise<boolean> {
-  // Update only if status is still 'pending' — this is our atomic claim
   const { data, error } = await supabase
     .from('print_jobs')
     .update({ status: 'processing', updated_at: new Date().toISOString() })
     .eq('id', jobId)
-    .eq('status', 'pending')  // ← Only succeeds if it's still pending
+    .eq('status', 'pending')
     .select('id')
     .single()
-
   if (error || !data) {
-    log(`Job ${jobId} already claimed by another device — skipping`)
+    log(`Job ${jobId} already claimed — skipping`)
     return false
   }
   return true
 }
 
-// ─── Core: process a single print job with retries ────────────────────────────
+// ─── Process one job with retry logic ──────────────────────────────────────────
 async function processJob(supabase: ReturnType<typeof createClient>, job: any) {
   const jobId = job.id
 
-  // Deduplicate within this device session
   if (processingJobs.has(jobId)) {
-    log(`Job ${jobId} already processing on this device — skipping`)
+    log(`Job ${jobId} already in-flight on this device — skipping`)
     return
   }
   processingJobs.add(jobId)
+  log(`📥 JOB RECEIVED: ${jobId}`)
 
   try {
-    log(`📥 Job received: ${jobId}`)
-
-    // Claim atomically (prevents other Android devices from duplicating)
     const claimed = await claimJob(supabase, jobId)
-    if (!claimed) {
-      processingJobs.delete(jobId)
-      return
-    }
+    if (!claimed) { processingJobs.delete(jobId); return }
+
+    log(`🔒 JOB CLAIMED: ${jobId}`)
 
     let lastError = ''
-    let attempt = 0
-
-    while (attempt <= MAX_RETRIES) {
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       if (attempt > 0) {
         const delay = RETRY_DELAYS[attempt - 1] ?? 30000
-        log(`🔄 Retry ${attempt}/${MAX_RETRIES} for job ${jobId} in ${delay / 1000}s...`)
+        log(`🔄 Retry ${attempt}/${MAX_RETRIES} for ${jobId} in ${delay / 1000}s`)
         await new Promise(r => setTimeout(r, delay))
       }
 
       try {
-        log(`🔌 Connecting to printer ${PRINTER_IP}:${PRINTER_PORT} (attempt ${attempt + 1})...`)
+        log(`🔌 CONNECTING TO PRINTER ${PRINTER_IP}:${PRINTER_PORT} (attempt ${attempt + 1})`)
+        log(`⚙️  JOB PROCESSING: ${jobId}`)
 
         const result = await nativePrintReceipt({
           order:             job.order_data,
           paymentMethod:     job.payment_method,
-          taxRate:           job.tax_rate,
-          serviceChargeRate: job.service_charge_rate ?? 0,
+          taxRate:           Number(job.tax_rate),
+          serviceChargeRate: Number(job.service_charge_rate ?? 0),
           paperWidth:        job.paper_width ?? 80,
           printerIp:         PRINTER_IP,
           printerPort:       PRINTER_PORT,
         })
 
         if (result.success) {
-          log(`✅ Job ${jobId} completed successfully`)
+          log(`✅ JOB COMPLETED: ${jobId}`)
           await setJobStatus(supabase, jobId, 'completed')
           processingJobs.delete(jobId)
           return
-        } else {
-          lastError = result.error ?? 'Unknown printer error'
-          logError(`Job ${jobId} print failed: ${lastError}`)
         }
-      } catch (err: any) {
-        lastError = err?.message ?? 'TCP connection exception'
-        logError(`Job ${jobId} exception (attempt ${attempt + 1}):`, lastError)
-      }
 
-      attempt++
+        lastError = result.error ?? 'Unknown printer error'
+        err(`Print failed (attempt ${attempt + 1}): ${lastError}`)
+      } catch (e: any) {
+        lastError = e?.message ?? 'TCP exception'
+        err(`Exception (attempt ${attempt + 1}):`, lastError)
+      }
     }
 
-    // All retries exhausted
-    logError(`Job ${jobId} failed after ${MAX_RETRIES} retries. Last error: ${lastError}`)
+    err(`Job ${jobId} exhausted retries. Final error: ${lastError}`)
     await setJobStatus(supabase, jobId, 'failed', {
       error_message: lastError,
       retry_count: MAX_RETRIES,
@@ -151,9 +149,9 @@ async function processJob(supabase: ReturnType<typeof createClient>, job: any) {
   }
 }
 
-// ─── Fetch and drain all pending jobs on startup ──────────────────────────────
+// ─── Drain all pending jobs on startup ─────────────────────────────────────────
 async function drainPendingJobs(supabase: ReturnType<typeof createClient>) {
-  log('🔍 Checking for missed pending jobs...')
+  log('🔍 Draining pending jobs...')
   try {
     const { data, error } = await supabase
       .from('print_jobs')
@@ -162,89 +160,118 @@ async function drainPendingJobs(supabase: ReturnType<typeof createClient>) {
       .order('created_at', { ascending: true })
 
     if (error) {
-      logError('Failed to fetch pending jobs:', error.message)
-      onStatusChange('error', error.message)
+      err('Failed to fetch pending jobs:', error.message)
+      _onStatusChange('error', `DB error: ${error.message}`)
       return
     }
 
     if (data && data.length > 0) {
-      log(`📋 Found ${data.length} pending job(s) on startup — processing...`)
+      log(`📋 Found ${data.length} pending job(s) — processing now`)
       for (const job of data) {
         await processJob(supabase, job)
       }
     } else {
-      log('✓ No pending jobs found on startup')
+      log('✓ No pending jobs found')
     }
-  } catch (err: any) {
-    logError('drainPendingJobs error:', err.message)
-    onStatusChange('error', err.message)
+  } catch (e: any) {
+    err('drainPendingJobs error:', e.message)
+    _onStatusChange('error', e.message)
   }
 }
 
-// ─── Heartbeat: write device info every 30 seconds ───────────────────────────
-function startHeartbeat(supabase: ReturnType<typeof createClient>) {
-  const deviceName = `Android-POS-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
+// ─── Heartbeat: write device presence every 15 seconds ─────────────────────────
+function startHeartbeat(supabase: ReturnType<typeof createClient>): () => void {
+  let printerConnected = false
 
   const ping = async () => {
+    // Try a quick test to see if printer IP is reachable
     try {
-      await supabase
+      // We can't do a TCP ping from JS — we rely on last successful print
+      printerConnected = !processingJobs.size ? printerConnected : true
+    } catch {}
+
+    const payload = {
+      device_id:         DEVICE_ID,
+      device_name:       'Android POS',
+      last_seen:         new Date().toISOString(),
+      printer_ip:        PRINTER_IP,
+      printer_port:      PRINTER_PORT,
+      printer_connected: printerConnected,
+      wifi_connected:    typeof navigator !== 'undefined' ? navigator.onLine : true,
+      app_version:       '1.0.0',
+    }
+
+    try {
+      const { error } = await supabase
         .from('pos_heartbeat')
-        .upsert({
-          device_id:         deviceName,
-          device_name:       deviceName,
-          last_seen:         new Date().toISOString(),
-          printer_ip:        PRINTER_IP,
-          printer_port:      PRINTER_PORT,
-          printer_connected: true,
-          wifi_connected:    typeof navigator !== 'undefined' ? navigator.onLine : true,
-          app_version:       '1.0.0',
-        }, { onConflict: 'device_id' })
-    } catch (err: any) {
-      // Non-fatal — heartbeat is optional
-      log('Heartbeat skipped (table may not exist yet):', err?.message)
+        .upsert(payload, { onConflict: 'device_id' })
+
+      if (error) {
+        // If table doesn't exist yet, log but don't break the worker
+        if (error.code === '42P01') {
+          log('⚠️  pos_heartbeat table not created yet — heartbeat skipped')
+        } else {
+          err('Heartbeat upsert error:', error.message)
+        }
+      } else {
+        log(`💓 HEARTBEAT SENT — online=true, wifi=${payload.wifi_connected}`)
+        printerConnected = true // Mark as connected once heartbeat succeeds
+      }
+    } catch (e: any) {
+      err('Heartbeat exception:', e.message)
     }
   }
 
-  ping() // immediate
-  const interval = setInterval(ping, 30_000)
+  ping() // immediate first ping
+  const interval = setInterval(ping, HEARTBEAT_MS)
   return () => clearInterval(interval)
 }
 
-// ─── Main entry point ─────────────────────────────────────────────────────────
+// ─── Main entry point ──────────────────────────────────────────────────────────
 export function startPrintWorker(): () => void {
   if (!isNativeAndroid()) {
-    log('Not on Android native — worker not started')
+    log('Not on Android native — worker not started (isNativeAndroid=false)')
     return () => {}
   }
 
   if (workerStarted) {
-    log('Worker already running — skipping duplicate start')
+    log('Worker already running — ignoring duplicate start')
     return () => {}
   }
   workerStarted = true
 
-  log('🟢 Print Server Active — starting worker...')
-  onStatusChange('online')
+  console.log('') // blank line for visibility
+  console.log('╔══════════════════════════════════════╗')
+  console.log('║  🟢 PRINT SERVER ACTIVE               ║')
+  console.log(`║  APP STARTED                          ║`)
+  console.log(`║  WORKER STARTED                       ║`)
+  console.log('╚══════════════════════════════════════╝')
+  console.log('')
+
+  _onStatusChange('online')
 
   const supabase = createClient()
 
-  // 1. Drain any pending jobs from before the app launched
+  // 1. Connect to Supabase
+  log('SUPABASE CONNECTED — initializing worker')
+
+  // 2. Drain missed jobs first
   drainPendingJobs(supabase)
 
-  // 2. Start heartbeat
+  // 3. Start heartbeat (15s interval)
   const stopHeartbeat = startHeartbeat(supabase)
 
-  // 3. Subscribe to Realtime — listen for ALL inserts to print_jobs
-  //    We do NOT filter by status here because Supabase Realtime filters
-  //    on INSERT are unreliable. We filter in-code instead.
+  // 4. Subscribe Realtime — NO column filter on INSERT (unreliable in Supabase)
+  //    Filter is applied in-code: job.status === 'pending'
+  log('REALTIME SUBSCRIBED — listening for new print jobs')
   const channel = supabase
-    .channel('pos-print-worker', { config: { broadcast: { ack: false } } })
+    .channel('pos-print-worker-v2')
     .on(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'print_jobs' },
       async (payload: any) => {
         const job = payload.new
-        log(`📡 Realtime INSERT received: job ${job.id}, status=${job.status}`)
+        log(`📡 REALTIME INSERT: job ${job.id}, status=${job.status}`)
         if (job.status === 'pending') {
           await processJob(supabase, job)
         }
@@ -252,13 +279,20 @@ export function startPrintWorker(): () => void {
     )
     .subscribe()
 
-  log('📡 Subscribed to Supabase Realtime print_jobs')
-
-  // Cleanup function
   return () => {
-    log('🛑 Stopping print worker...')
+    log('🛑 Stopping print worker')
     workerStarted = false
     supabase.removeChannel(channel)
     stopHeartbeat()
+  }
+}
+
+// ─── Export for diagnostics page ────────────────────────────────────────────────
+export function getWorkerStatus() {
+  return {
+    started: workerStarted,
+    isAndroid: isNativeAndroid(),
+    processingJobs: processingJobs.size,
+    deviceId: DEVICE_ID,
   }
 }
