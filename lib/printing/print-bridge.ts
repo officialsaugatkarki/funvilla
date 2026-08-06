@@ -9,8 +9,8 @@
  *
  * Routing logic:
  *   1. Running in Android (Capacitor native): → ThermalPrinterPlugin (Kotlin TCP)
- *   2. Running in browser (including iPhone PWA): → POST /api/print (server TCP)
- *   3. Server unreachable / user prefers image:  → canvas image → hidden iframe print
+ *   2. Running in browser (including iPhone PWA): → Inserts print_job to Supabase, waits for Android to print.
+ *   3. Server unreachable / user prefers image / timeout:  → canvas image → hidden iframe print
  */
 
 'use client'
@@ -18,6 +18,8 @@
 import { toast } from 'sonner'
 import type { ReceiptOrder } from './escpos-formatter'
 import { isNativeAndroid, nativePrintReceipt } from './thermal-plugin'
+import { createPrintJob } from '@/lib/actions/print.actions'
+import { createClient } from '@/lib/supabase/client'
 
 /**
  * Print a receipt.
@@ -41,7 +43,6 @@ export async function printReceipt(
   }
 
   // ── Path 1: Android native — TCP via Capacitor ThermalPrinterPlugin ────────
-  // Unchanged from before.
   if (isNativeAndroid()) {
     try {
       toast.loading('Sending to printer...', { id: 'print-toast' })
@@ -69,40 +70,62 @@ export async function printReceipt(
     return
   }
 
-  // ── Path 2: Browser / iPhone PWA — server-side TCP via /api/print ──────────
-  // Safari and PWAs cannot open raw TCP sockets, so we POST the order data
-  // to our Next.js API route which runs in Node.js on the server and opens
-  // the TCP connection from there. This works on iPhone Safari, Android Chrome
-  // in browser mode, and any other browser accessing the management system.
-  toast.loading('Sending to printer...', { id: 'print-toast' })
+  // ── Path 2: Browser / iPhone PWA — Supabase Print Relay ──────────
+  // Safari and PWAs cannot open raw TCP sockets, and Vercel cannot reach local IPs.
+  // We insert a print job into Supabase. The Android POS app listens for new jobs
+  // and prints them locally on the network.
+  toast.loading('Relaying to POS printer...', { id: 'print-toast' })
   try {
-    const res = await fetch('/api/print', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ order, paymentMethod, taxRate, serviceChargeRate, paperWidth }),
-    })
-
-    const json = await res.json().catch(() => ({ success: false, error: 'Invalid response' }))
-
-    if (res.ok && json.success) {
-      toast.success('Receipt printed successfully!', { id: 'print-toast' })
-      return
+    const res = await createPrintJob(order, paymentMethod, taxRate, serviceChargeRate, paperWidth)
+    if (res.error || !res.data) {
+      throw new Error(res.error || 'Failed to create print job')
     }
 
-    // Server reported an error (printer offline, validation failure, etc.)
-    const errMsg: string = json.error ?? `Server error ${res.status}`
-    console.error('[printReceipt] Server print error:', errMsg)
-    toast.error(`Print failed: ${errMsg}`, { id: 'print-toast' })
+    const jobId = res.data.id
 
-    // ── Fallback: if the server print fails, fall through to canvas image ──
-    // (e.g. printer is offline but user still wants a visual receipt image)
-    const { printReceiptImageDirectly } = await import('@/components/admin/receipt')
-    printReceiptImageDirectly(order, paymentMethod, taxRate, serviceChargeRate)
-    return
+    // Wait for the Android POS app to pick up and process the job
+    const success = await new Promise<boolean>((resolve) => {
+      const supabase = createClient()
+      
+      // Setup timeout - if Android app doesn't pick it up in 15 seconds, fallback
+      const timer = setTimeout(() => {
+        supabase.removeChannel(channel)
+        resolve(false)
+      }, 15000)
+
+      const channel = supabase.channel(`print_job_${jobId}`)
+        .on('postgres_changes', { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: 'print_jobs',
+          filter: `id=eq.${jobId}`
+        }, (payload: any) => {
+          const status = payload.new.status
+          if (status === 'completed') {
+            clearTimeout(timer)
+            supabase.removeChannel(channel)
+            toast.success('Receipt printed successfully!', { id: 'print-toast' })
+            resolve(true)
+          } else if (status === 'failed') {
+            clearTimeout(timer)
+            supabase.removeChannel(channel)
+            const errMsg = payload.new.error_message || 'Printer error'
+            toast.error(`Print failed: ${errMsg}`, { id: 'print-toast' })
+            resolve(false) // Will trigger fallback below
+          }
+        })
+        .subscribe()
+    })
+
+    if (success) {
+      return // Done!
+    }
+
+    toast.error('Print timeout or error. Showing visual receipt instead.', { id: 'print-toast' })
+    // Fallback falls through to Path 3 below
   } catch (err: any) {
-    // Network error reaching our own API (very unlikely on Vercel, but handle it)
-    console.error('[printReceipt] fetch /api/print error:', err)
-    toast.error('Could not reach print server. Falling back to image print.', { id: 'print-toast' })
+    console.error('[printReceipt] Supabase relay error:', err)
+    toast.error('Could not reach print server. Showing visual receipt instead.', { id: 'print-toast' })
   }
 
   // ── Path 3: Canvas image → hidden iframe (last resort / offline fallback) ──

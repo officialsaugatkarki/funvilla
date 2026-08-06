@@ -19,6 +19,8 @@ import { createOrder, processPayment, getActiveOrdersForPOS } from '@/lib/action
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { printReceipt } from '@/lib/printing/print-bridge'
+import { isNativeAndroid, nativePrintReceipt } from '@/lib/printing/thermal-plugin'
+import { updatePrintJobStatus } from '@/lib/actions/print.actions'
 import { downloadReceiptImage } from '@/components/admin/receipt'
 
 interface CartItem {
@@ -85,6 +87,54 @@ export default function POSClient({
         if (res.data) setActiveOrders(res.data)
       })
       .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [])
+
+  // Background Print Worker (Android Only)
+  useEffect(() => {
+    if (!isNativeAndroid()) return // Only run on Android native POS tablet
+
+    console.log('[Print Worker] Initialized on Android POS')
+    const supabase = createClient()
+    const channel = supabase.channel('pos-print-worker')
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'print_jobs',
+        filter: 'status=eq.pending'
+      }, async (payload: any) => {
+        const job = payload.new
+        console.log('[Print Worker] Received new print job:', job.id)
+        
+        // 1. Claim the job
+        await updatePrintJobStatus(job.id, 'processing')
+
+        // 2. Print via local TCP
+        try {
+          const result = await nativePrintReceipt({
+            order: job.order_data,
+            paymentMethod: job.payment_method,
+            taxRate: job.tax_rate,
+            serviceChargeRate: job.service_charge_rate,
+            paperWidth: job.paper_width,
+            printerIp: '192.168.1.127',
+            printerPort: 9100,
+          })
+
+          if (result.success) {
+            console.log('[Print Worker] Print success:', job.id)
+            await updatePrintJobStatus(job.id, 'completed')
+          } else {
+            console.error('[Print Worker] Print failed:', result.error)
+            await updatePrintJobStatus(job.id, 'failed', result.error)
+          }
+        } catch (err: any) {
+          console.error('[Print Worker] Exception during print:', err)
+          await updatePrintJobStatus(job.id, 'failed', err?.message || 'Unknown exception')
+        }
+      })
+      .subscribe()
+
     return () => { supabase.removeChannel(channel) }
   }, [])
 
