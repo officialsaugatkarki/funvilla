@@ -206,7 +206,12 @@ async function setJobStatus(
     .from('print_jobs')
     .update({ status, updated_at: new Date().toISOString(), ...extra })
     .eq('id', jobId)
-  if (error) logError(`setJobStatus(${status}) failed for ${jobId}:`, error.message)
+  
+  if (error) {
+    logError(`setJobStatus(${status}) failed for ${jobId}:`, error.message)
+  } else {
+    log(`[DB] Job ${jobId} status updated to: ${status}`)
+  }
 }
 
 async function claimJob(
@@ -222,9 +227,10 @@ async function claimJob(
     .single()
 
   if (error || !data) {
-    log(`Job ${jobId} already claimed by another device — skipping`)
+    log(`[DB] Job ${jobId} could not be claimed (already claimed or missing)`)
     return false
   }
+  log(`[DB] Job ${jobId} successfully claimed (pending → processing)`)
   return true
 }
 
