@@ -169,7 +169,7 @@ export default function POSClient({
       }, async (payload: any) => {
         await processJob(payload.new)
       })
-      .subscribe((status, err) => {
+      .subscribe((status: string, err?: Error) => {
         if (status === 'SUBSCRIBED') {
           console.log('[Print Worker] Realtime subscribed successfully')
         } else {
