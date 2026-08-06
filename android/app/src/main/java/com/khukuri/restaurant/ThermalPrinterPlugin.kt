@@ -38,7 +38,35 @@ class ThermalPrinterPlugin : Plugin() {
         private const val DEFAULT_PORT = 9100
         private const val CONNECT_TIMEOUT_MS = 5000   // 5 seconds to connect
         private const val WRITE_TIMEOUT_MS   = 8000   // 8 seconds to write all data
-        private const val MAX_RETRIES = 1              // Retry once on failure
+        private const val MAX_RETRIES = 3              // Retry 3 times on failure
+        val RETRY_DELAYS_MS = arrayOf(2000L, 4000L, 6000L) // Exponential backoff for Wi-Fi roaming
+    }
+
+    private fun getLocalIpAddress(): String {
+        try {
+            val interfaces = java.net.NetworkInterface.getNetworkInterfaces()
+            for (intf in interfaces) {
+                if (intf.isLoopback || !intf.isUp) continue
+                for (addr in intf.inetAddresses) {
+                    if (!addr.isLoopbackAddress && addr.hostAddress?.contains(":") == false) {
+                        return addr.hostAddress ?: "Unknown"
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // ignore
+        }
+        return "Unknown"
+    }
+
+    private fun isSameSubnet(ip1: String, ip2: String): Boolean {
+        if (ip1 == "Unknown" || ip2 == "Unknown") return false
+        val parts1 = ip1.split(".")
+        val parts2 = ip2.split(".")
+        if (parts1.size == 4 && parts2.size == 4) {
+            return parts1[0] == parts2[0] && parts1[1] == parts2[1] && parts1[2] == parts2[2]
+        }
+        return false
     }
 
     @PluginMethod
@@ -128,20 +156,30 @@ class ThermalPrinterPlugin : Plugin() {
 
             for (attempt in 0..MAX_RETRIES) {
                 try {
+                    val localIp = getLocalIpAddress()
+                    if (localIp == "Unknown") {
+                        throw java.net.ConnectException("Tablet has no IPv4 network connection. Wi-Fi may be authenticating.")
+                    }
+
+                    if (!isSameSubnet(localIp, printerIp)) {
+                        throw java.net.ConnectException("Tablet is on a different network (Tablet IP: $localIp, Printer: $printerIp). Ensure the Play Area AP is in Bridge Mode.")
+                    }
+
                     sendToPrinter(printerIp, printerPort, receiptBytes)
                     success = true
                     break
                 } catch (e: java.net.SocketTimeoutException) {
-                    lastError = "Printer offline or unreachable. Check that the printer is powered on and connected to the network at $printerIp:$printerPort"
+                    lastError = "Printer offline or timed out. Check that it is powered on at $printerIp:$printerPort"
                 } catch (e: java.net.ConnectException) {
-                    lastError = "Cannot connect to printer at $printerIp:$printerPort. Make sure the printer is on the same Wi-Fi network."
+                    lastError = e.message ?: "Cannot connect to printer at $printerIp:$printerPort."
                 } catch (e: Exception) {
                     lastError = "Print error: ${e.message}"
                 }
 
                 if (attempt < MAX_RETRIES) {
-                    // Wait 1 second before retrying
-                    Thread.sleep(1000)
+                    // Exponential backoff
+                    val delay = RETRY_DELAYS_MS.getOrElse(attempt) { 5000L }
+                    Thread.sleep(delay)
                 }
             }
 
