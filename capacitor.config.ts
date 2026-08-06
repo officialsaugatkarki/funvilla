@@ -17,14 +17,13 @@ const config: CapacitorConfig = {
   //
   // Change this to your production URL or local LAN server IP.
   server: {
-    url: 'https://www.khukurirestaurantfunvilla.com',
+    url: 'https://www.khukurirestaurantfunvilla.com/auth/login',
     cleartext: false,
     allowNavigation: [
       'khukurirestaurantfunvilla.com',
       'www.khukurirestaurantfunvilla.com',
       '*.khukurirestaurantfunvilla.com'
-    ],
-    appStartPath: '/auth/login',
+    ]
   },
 
   plugins: {
