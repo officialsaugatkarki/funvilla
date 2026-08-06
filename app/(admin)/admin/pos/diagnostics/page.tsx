@@ -3,11 +3,12 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { isNativeAndroid } from '@/lib/printing/thermal-plugin'
-import { getWorkerStatus } from '@/lib/printing/print-worker'
+import { getWorkerStatus, forceHeartbeat } from '@/lib/printing/print-worker'
 import { getPrintServerDiagnostics, type PrintServerDiagnostics } from '@/lib/printing/print-bridge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { RefreshCw, Wifi, WifiOff, PrinterCheck, PrinterX, CheckCircle2, XCircle, Clock, AlertTriangle } from 'lucide-react'
+import { RefreshCw, Wifi, WifiOff, PrinterCheck, PrinterX, CheckCircle2, XCircle, Clock, AlertTriangle, Activity } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface HeartbeatRow {
   device_id: string
@@ -129,6 +130,16 @@ export default function PrintDiagnosticsPage() {
     return `${Math.round(s / 3600)}h ago`
   }
 
+  const handleTestHeartbeat = async () => {
+    try {
+      await forceHeartbeat()
+      toast.success('Heartbeat sent successfully')
+      setTimeout(load, 1000) // Reload data after a second
+    } catch (e: any) {
+      toast.error(`Heartbeat failed: ${e.message}`)
+    }
+  }
+
   const { serverDiag: sd, heartbeats } = state
   const latestHB = heartbeats[0] ?? null
 
@@ -141,10 +152,18 @@ export default function PrintDiagnosticsPage() {
             Last refreshed: {state.lastRefreshed.toLocaleTimeString()}
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={load} disabled={state.loading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${state.loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          {state.isAndroid && (
+            <Button variant="secondary" size="sm" onClick={handleTestHeartbeat}>
+              <Activity className="h-4 w-4 mr-2" />
+              Send Test Heartbeat
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={load} disabled={state.loading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${state.loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* This Device */}

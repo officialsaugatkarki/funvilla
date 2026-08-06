@@ -94,21 +94,18 @@ export default function POSClient({
   }, [])
 
   // Background Print Worker (Android only)
-  // Starts once on mount, cleans up on unmount.
+  // Connect local UI status to the global print worker
   useEffect(() => {
     if (!isNativeAndroid()) {
       setPrintServerStatus('relay')
       return
     }
 
-    // Wire status updates into React state
+    // Wire status updates into React state from the global worker
     setPrintWorkerStatusCallback((status, message) => {
       setPrintServerStatus(status)
       if (message) setPrintWorkerError(message)
     })
-
-    const stop = startPrintWorker()
-    return stop
   }, [])
 
   const filtered = items.filter(item => {

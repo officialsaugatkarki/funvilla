@@ -93,7 +93,7 @@ async function processJob(supabase: ReturnType<typeof createClient>, job: any) {
     return
   }
   processingJobs.add(jobId)
-  log(`📥 JOB RECEIVED: ${jobId}`)
+  log(`JOB RECEIVED: ${jobId}`)
 
   try {
     const claimed = await claimJob(supabase, jobId)
@@ -111,7 +111,7 @@ async function processJob(supabase: ReturnType<typeof createClient>, job: any) {
 
       try {
         log(`🔌 CONNECTING TO PRINTER ${PRINTER_IP}:${PRINTER_PORT} (attempt ${attempt + 1})`)
-        log(`⚙️  JOB PROCESSING: ${jobId}`)
+        log(`JOB PROCESSING: ${jobId}`)
 
         const result = await nativePrintReceipt({
           order:             job.order_data,
@@ -124,7 +124,7 @@ async function processJob(supabase: ReturnType<typeof createClient>, job: any) {
         })
 
         if (result.success) {
-          log(`✅ JOB COMPLETED: ${jobId}`)
+          log(`JOB COMPLETED: ${jobId}`)
           await setJobStatus(supabase, jobId, 'completed')
           processingJobs.delete(jobId)
           return
@@ -180,13 +180,20 @@ async function drainPendingJobs(supabase: ReturnType<typeof createClient>) {
 }
 
 // ─── Heartbeat: write device presence every 15 seconds ─────────────────────────
+let triggerHeartbeatCallback: () => Promise<void> = async () => {}
+
+export async function forceHeartbeat() {
+  await triggerHeartbeatCallback()
+}
+
 function startHeartbeat(supabase: ReturnType<typeof createClient>): () => void {
   let printerConnected = false
 
+  log('HEARTBEAT SERVICE STARTED')
+
   const ping = async () => {
-    // Try a quick test to see if printer IP is reachable
+    log('SENDING HEARTBEAT')
     try {
-      // We can't do a TCP ping from JS — we rely on last successful print
       printerConnected = !processingJobs.size ? printerConnected : true
     } catch {}
 
@@ -207,24 +214,50 @@ function startHeartbeat(supabase: ReturnType<typeof createClient>): () => void {
         .upsert(payload, { onConflict: 'device_id' })
 
       if (error) {
-        // If table doesn't exist yet, log but don't break the worker
         if (error.code === '42P01') {
-          log('⚠️  pos_heartbeat table not created yet — heartbeat skipped')
+          err('UPSERT ERROR: pos_heartbeat table not created yet')
         } else {
-          err('Heartbeat upsert error:', error.message)
+          err(`UPSERT ERROR: ${error.message} (Code: ${error.code})`)
         }
+        log('HEARTBEAT FAILED')
       } else {
-        log(`💓 HEARTBEAT SENT — online=true, wifi=${payload.wifi_connected}`)
+        log(`UPSERT SUCCESS`)
+        log('HEARTBEAT SUCCESS')
         printerConnected = true // Mark as connected once heartbeat succeeds
       }
     } catch (e: any) {
-      err('Heartbeat exception:', e.message)
+      err(`UPSERT ERROR (Exception): ${e.message}`)
+      log('HEARTBEAT FAILED')
     }
   }
 
-  ping() // immediate first ping
+  triggerHeartbeatCallback = ping
+
+  log('HEARTBEAT TIMER STARTED')
+  ping() // immediate first ping on startup
+
   const interval = setInterval(ping, HEARTBEAT_MS)
-  return () => clearInterval(interval)
+
+  // Listen to visibility changes (app goes to background / foreground)
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === 'visible') {
+      log('APP RESUMED - SENDING HEARTBEAT IMMEDIATE')
+      ping()
+    } else {
+      log('APP BACKGROUNDED')
+    }
+  }
+  
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+  }
+
+  return () => {
+    clearInterval(interval)
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }
 }
 
 // ─── Main entry point ──────────────────────────────────────────────────────────
@@ -263,7 +296,7 @@ export function startPrintWorker(): () => void {
 
   // 4. Subscribe Realtime — NO column filter on INSERT (unreliable in Supabase)
   //    Filter is applied in-code: job.status === 'pending'
-  log('REALTIME SUBSCRIBED — listening for new print jobs')
+  log('REALTIME SUBSCRIBED')
   const channel = supabase
     .channel('pos-print-worker-v2')
     .on(
