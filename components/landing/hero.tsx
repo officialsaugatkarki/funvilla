@@ -32,11 +32,11 @@ export function Hero() {
         
         {/* Top Right Info Badges */}
         <div className="absolute top-5 right-5 lg:top-8 lg:right-8 hidden md:flex flex-col gap-2">
-          <div className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 backdrop-blur-md text-white text-[10px]">
+          <div className="flex items-center gap-2 rounded-full border border-white/20 bg-black/40 px-3 py-1 text-white text-[10px]">
             <Clock className="h-3 w-3" />
             <span>8:00 AM – 10:00 PM</span>
           </div>
-          <div className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 backdrop-blur-md text-white text-[10px]">
+          <div className="flex items-center gap-2 rounded-full border border-white/20 bg-black/40 px-3 py-1 text-white text-[10px]">
             <MapPin className="h-3 w-3" />
             <span>Hetauda, Nepal</span>
           </div>
@@ -50,7 +50,7 @@ export function Hero() {
             transition={{ duration: 0.7 }}
             className="mb-3 flex items-center gap-2 text-accent"
           >
-            <div className="h-1.5 w-1.5 bg-accent rounded-full animate-pulse" />
+            <div className="h-1.5 w-1.5 bg-accent rounded-full" />
             <span className="text-[10px] font-semibold tracking-widest uppercase">Experience Nature &amp; Hospitality</span>
           </motion.div>
 
@@ -92,7 +92,7 @@ export function Hero() {
             </Link>
 
             <button className="flex items-center gap-2.5 text-sm font-medium text-white transition-opacity hover:opacity-80">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/40 bg-white/10 backdrop-blur-sm">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/40 bg-black/40">
                 <Play className="h-3.5 w-3.5 fill-white" />
               </div>
               Watch Video
@@ -117,7 +117,7 @@ export function Hero() {
             initial={{ opacity: 0, x: 16 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.9, delay: 0.7 }}
-            className="hidden lg:block rounded-2xl border border-white/10 bg-black/40 p-4 backdrop-blur-md text-white w-64 shadow-2xl"
+            className="hidden lg:block rounded-2xl border border-white/10 bg-black/80 p-4 text-white w-64 shadow-2xl"
           >
             <h3 className="font-serif text-lg leading-snug mb-3">Escape. Relax.<br/>Enjoy.</h3>
             <div className="flex gap-2">

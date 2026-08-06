@@ -86,14 +86,14 @@ export function RoomsPreview() {
           >
             {/* 3D Model Viewer */}
             <div className="relative w-full sm:w-2/5 aspect-[16/10] sm:aspect-auto overflow-hidden bg-gray-50/50 flex items-center justify-center">
-              <Canvas camera={{ position: [0, 2, 5], fov: 45 }}>
+              <Canvas camera={{ position: [0, 2, 5], fov: 45 }} frameloop="demand">
                 <ambientLight intensity={1} />
                 <directionalLight position={[10, 10, 5]} intensity={1} />
                 <Environment preset="city" />
                 <Suspense fallback={null}>
                   <Model url={room.model} />
                 </Suspense>
-                <OrbitControls enableZoom={false} autoRotate />
+                <OrbitControls enableZoom={false} autoRotate={false} />
               </Canvas>
             </div>
 
