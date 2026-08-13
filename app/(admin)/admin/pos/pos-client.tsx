@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils'
 import { printReceipt } from '@/lib/printing/print-bridge'
 import { isNativeAndroid } from '@/lib/printing/thermal-plugin'
 import { startPrintWorker, setPrintWorkerStatusCallback } from '@/lib/printing/print-worker'
-import { downloadReceiptImage } from '@/components/admin/receipt'
+import { downloadReceiptImage, printReceiptCanvas } from '@/components/admin/receipt'
 
 interface CartItem {
   menuItemId: string
@@ -785,6 +785,19 @@ export default function POSClient({
             >
               <Download className="h-4 w-4" />
             </Button>
+            {/* USB Canvas Print — desktop/laptop only, hidden on Android */}
+            {!isNativeAndroid() && (
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  printReceiptCanvas(completedOrder, paymentMethod, taxRate, serviceChargeRate)
+                }}
+                title="Print to USB thermal printer via browser"
+              >
+                <Receipt className="mr-2 h-4 w-4" /> Print (USB)
+              </Button>
+            )}
             <Button
               className="flex-1"
               onClick={() => {

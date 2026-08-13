@@ -65,6 +65,7 @@ function buildReceiptLines(order: any, paymentMethod: string, taxRate: number, s
     row('Date', dateStr),
     row('Time', timeStr),
     row('Type', orderType),
+    ...(order.restaurant_tables?.table_number ? [row('Table', order.restaurant_tables.table_number)] : []),
     row('Payment', paymentMethod),
     divider('-'),
     itemRow('Item', 'Total'),
@@ -151,4 +152,80 @@ export function downloadReceiptImage(
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// printReceiptCanvas — for Desktop/Laptop USB thermal printers
+//
+// Renders the receipt as a canvas image (identical to the thermal layout)
+// then opens a browser print window showing ONLY that image.
+// When printed on a USB thermal printer this produces output identical to
+// the ESC/POS Android receipt.
+// ─────────────────────────────────────────────────────────────────────────────
+export function printReceiptCanvas(
+  order: any,
+  paymentMethod: string,
+  taxRate: number,
+  serviceChargeRate: number = 0
+): void {
+  if (!order) return
+  const lines = buildReceiptLines(order, paymentMethod, taxRate, serviceChargeRate)
+
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+
+  const fontSize   = 18
+  const lineHeight = 22
+  const padding    = 12
+
+  canvas.width  = 384
+  canvas.height = (lines.length * lineHeight) + (padding * 2)
+
+  // White background
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+  // Draw receipt text lines
+  ctx.fillStyle    = '#000000'
+  ctx.font         = `bold ${fontSize}px "Courier New", Courier, monospace`
+  ctx.textBaseline = 'top'
+
+  lines.forEach((line, index) => {
+    ctx.fillText(line, padding, padding + (index * lineHeight))
+  })
+
+  const dataUrl = canvas.toDataURL('image/png')
+
+  // Open a minimal print window containing only the receipt image
+  const win = window.open('', '_blank', 'width=500,height=700')
+  if (!win) {
+    alert('Please allow popups for this site to print the receipt.')
+    return
+  }
+
+  win.document.write(`<!DOCTYPE html>
+<html>
+  <head>
+    <title>Receipt - ${order.order_number || ''}</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { background: #fff; display: flex; justify-content: center; }
+      img  { display: block; width: 384px; max-width: 100%; }
+      @media print {
+        body { margin: 0; }
+        img  { width: 100%; page-break-after: avoid; }
+      }
+    </style>
+  </head>
+  <body>
+    <img src="${dataUrl}" />
+    <script>
+      window.onload = function() {
+        setTimeout(function() { window.print(); window.close(); }, 200)
+      }
+    <\/script>
+  </body>
+</html>`)
+  win.document.close()
 }
