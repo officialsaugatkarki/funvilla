@@ -21,7 +21,8 @@ import { cn } from '@/lib/utils'
 import { printReceipt } from '@/lib/printing/print-bridge'
 import { isNativeAndroid } from '@/lib/printing/thermal-plugin'
 import { startPrintWorker, setPrintWorkerStatusCallback } from '@/lib/printing/print-worker'
-import { downloadReceiptImage, printReceiptCanvas } from '@/components/admin/receipt'
+import { downloadReceiptImage } from '@/components/admin/receipt'
+import { printReceiptUSB, testUsbPrinter } from '@/lib/printing/usb-printer'
 
 interface CartItem {
   menuItemId: string
@@ -785,26 +786,45 @@ export default function POSClient({
             >
               <Download className="h-4 w-4" />
             </Button>
-            {/* USB Canvas Print — desktop/laptop only, hidden on Android */}
+            {/* USB WebUSB Print — desktop/laptop only, hidden on Android */}
             {!isNativeAndroid() && (
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => {
-                  printReceiptCanvas(completedOrder, paymentMethod, taxRate, serviceChargeRate)
-                }}
-                title="Print to USB thermal printer via browser"
-              >
-                <Receipt className="mr-2 h-4 w-4" /> Print (USB)
-              </Button>
+              <div className="flex gap-2 flex-1">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={async () => {
+                    toast.info('Initiating USB print diagnostic...')
+                    const res = await testUsbPrinter()
+                    if (res.ok) toast.success('Diagnostic printed via USB')
+                    else toast.error('USB print failed: ' + res.error)
+                  }}
+                  title="Test USB Printer connection and formatting"
+                >
+                  USB Test
+                </Button>
+                <Button
+                  variant="default"
+                  className="flex-1"
+                  onClick={async () => {
+                    const res = await printReceiptUSB(completedOrder, paymentMethod, taxRate, serviceChargeRate)
+                    if (res.ok) toast.success('Printed receipt to USB printer')
+                    else toast.error('USB print failed: ' + res.error)
+                  }}
+                  title="Print to USB thermal printer via raw WebUSB ESC/POS"
+                >
+                  <Receipt className="mr-2 h-4 w-4" /> Print (USB)
+                </Button>
+              </div>
             )}
             <Button
               className="flex-1"
+              variant="default"
               onClick={() => {
                 printReceipt(completedOrder, paymentMethod, taxRate, serviceChargeRate)
               }}
+              title="Print via Android App / TCP Network"
             >
-              <Receipt className="mr-2 h-4 w-4" /> Print Receipt
+              <Receipt className="mr-2 h-4 w-4" /> Print (Network)
             </Button>
           </DialogFooter>
         </DialogContent>
