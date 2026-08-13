@@ -273,7 +273,7 @@ export async function testUsbPrinter(): Promise<UsbPrintStatus> {
     if (paired.length > 0) {
       device = paired[0]
     } else {
-      device = await navigator.usb.requestDevice({ filters: THERMAL_PRINTER_FILTERS })
+      device = await navigator.usb.requestDevice({ filters: [] })
     }
   } catch (e: any) {
     return { ok: false, error: `USB device selection failed: ${e?.message ?? e}` }
@@ -352,8 +352,9 @@ export async function printReceiptUSB(
       device = paired[0]
       console.log('[USB Printer] Reusing previously paired device:', device.productName)
     } else {
-      // Show USB device picker to the user
-      device = await navigator.usb.requestDevice({ filters: THERMAL_PRINTER_FILTERS })
+      // Use empty filters array so ALL USB devices show up.
+      // We will log the VID/PID of the selected device to add it to the allowlist later.
+      device = await navigator.usb.requestDevice({ filters: [] })
       console.log('[USB Printer] User selected device:', device.productName)
     }
   } catch (e: any) {
