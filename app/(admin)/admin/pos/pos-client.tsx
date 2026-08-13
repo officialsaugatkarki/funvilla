@@ -22,7 +22,7 @@ import { printReceipt } from '@/lib/printing/print-bridge'
 import { isNativeAndroid } from '@/lib/printing/thermal-plugin'
 import { startPrintWorker, setPrintWorkerStatusCallback } from '@/lib/printing/print-worker'
 import { downloadReceiptImage } from '@/components/admin/receipt'
-import { printReceiptUSB, testUsbPrinter } from '@/lib/printing/usb-printer'
+import { printReceiptLocalBridge, testLocalBridge } from '@/lib/printing/local-bridge'
 
 interface CartItem {
   menuItemId: string
@@ -786,33 +786,33 @@ export default function POSClient({
             >
               <Download className="h-4 w-4" />
             </Button>
-            {/* USB WebUSB Print — desktop/laptop only, hidden on Android */}
+            {/* Local Bridge Print — desktop/laptop only, hidden on Android */}
             {!isNativeAndroid() && (
               <div className="flex gap-2 flex-1">
                 <Button
                   variant="outline"
                   className="flex-1"
                   onClick={async () => {
-                    toast.info('Initiating USB print diagnostic...')
-                    const res = await testUsbPrinter()
-                    if (res.ok) toast.success('Diagnostic printed via USB')
-                    else toast.error('USB print failed: ' + res.error)
+                    toast.info('Sending test print to Local Bridge...')
+                    const res = await testLocalBridge()
+                    if (res.ok) toast.success('Diagnostic printed via Bridge')
+                    else toast.error('Bridge failed: ' + res.error)
                   }}
-                  title="Test USB Printer connection and formatting"
+                  title="Test Local Print Bridge connection"
                 >
-                  USB Test
+                  Bridge Test
                 </Button>
                 <Button
                   variant="default"
                   className="flex-1"
                   onClick={async () => {
-                    const res = await printReceiptUSB(completedOrder, paymentMethod, taxRate, serviceChargeRate)
-                    if (res.ok) toast.success('Printed receipt to USB printer')
-                    else toast.error('USB print failed: ' + res.error)
+                    const res = await printReceiptLocalBridge(completedOrder, paymentMethod, taxRate, serviceChargeRate)
+                    if (res.ok) toast.success('Receipt sent to Local Bridge')
+                    else toast.error('Bridge failed: ' + res.error)
                   }}
-                  title="Print to USB thermal printer via raw WebUSB ESC/POS"
+                  title="Print to Windows thermal printer via Local Bridge"
                 >
-                  <Receipt className="mr-2 h-4 w-4" /> Print (USB)
+                  <Receipt className="mr-2 h-4 w-4" /> Print (Local)
                 </Button>
               </div>
             )}
