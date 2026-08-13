@@ -1,17 +1,75 @@
 'use client'
 
-import { useTransition } from 'react'
+import { useState, useEffect, useTransition } from 'react'
 import { toast } from 'sonner'
-import { Settings, Save, Percent, Building2, MapPin, Globe, Phone } from 'lucide-react'
+import { Settings, Save, Percent, Building2, MapPin, Globe, Phone, Printer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { updateSettings } from '@/lib/actions/admin.actions'
+import { isNativeAndroid, nativePrintReceipt } from '@/lib/printing/thermal-plugin'
+import { Switch } from '@/components/ui/switch'
 
 export default function SettingsClient({ settings, restaurant }: { settings: any, restaurant: any }) {
   const [isPending, startTransition] = useTransition()
+  
+  // Printer settings (stored locally on device)
+  const [printerConfig, setPrinterConfig] = useState({
+    connectionType: 'usb' as 'usb' | 'network',
+    printerIp: '192.168.1.127',
+    printerPort: '9100',
+    paperWidth: '80',
+    autoPrint: true
+  })
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('pos_printer_config')
+      if (stored) {
+        setPrinterConfig(prev => ({ ...prev, ...JSON.parse(stored) }))
+      }
+    } catch (e) {}
+  }, [])
+
+  function savePrinterConfig() {
+    localStorage.setItem('pos_printer_config', JSON.stringify(printerConfig))
+    toast.success('Printer configuration saved to this device')
+  }
+
+  async function handleTestPrint() {
+    if (!isNativeAndroid()) {
+      toast.error('Test print is only available in the Android POS App')
+      return
+    }
+    
+    toast.loading('Sending test print...', { id: 'test-print' })
+    const dummyOrder = {
+      order_number: 'TEST-001',
+      order_type: 'test_print',
+      items: [{ name: 'Test Item', quantity: 1, price: 0 }],
+      subtotal: 0,
+      total: 0
+    }
+    
+    const res = await nativePrintReceipt({
+      order: dummyOrder,
+      paymentMethod: 'Test',
+      taxRate: 0,
+      paperWidth: parseInt(printerConfig.paperWidth, 10) as 58 | 80,
+      connectionType: printerConfig.connectionType,
+      printerIp: printerConfig.printerIp,
+      printerPort: parseInt(printerConfig.printerPort, 10) || 9100
+    })
+    
+    if (res.success) {
+      toast.success('Test receipt printed!', { id: 'test-print' })
+    } else {
+      toast.error(res.error || 'Failed to print test receipt', { id: 'test-print' })
+    }
+  }
 
   async function handleSaveSettings(fd: FormData) {
     const payload = {
@@ -46,7 +104,95 @@ export default function SettingsClient({ settings, restaurant }: { settings: any
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="billing">Financial & Taxes</TabsTrigger>
           <TabsTrigger value="pool">Pool Pricing</TabsTrigger>
+          <TabsTrigger value="printer">Printer</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="printer" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>POS Printer Configuration</CardTitle>
+              <CardDescription>Configure receipt printer settings for this device. Saved locally.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Connection Type</Label>
+                    <Select 
+                      value={printerConfig.connectionType} 
+                      onValueChange={(v: 'usb'|'network') => setPrinterConfig({...printerConfig, connectionType: v})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="usb">USB (Native Android)</SelectItem>
+                        <SelectItem value="network">Network (LAN/Wi-Fi)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Paper Width</Label>
+                    <Select 
+                      value={printerConfig.paperWidth} 
+                      onValueChange={(v) => setPrinterConfig({...printerConfig, paperWidth: v})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="80">80mm</SelectItem>
+                        <SelectItem value="58">58mm</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {printerConfig.connectionType === 'network' && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Printer IP Address</Label>
+                      <Input 
+                        value={printerConfig.printerIp}
+                        onChange={(e) => setPrinterConfig({...printerConfig, printerIp: e.target.value})}
+                        placeholder="192.168.1.127"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Port</Label>
+                      <Input 
+                        value={printerConfig.printerPort}
+                        onChange={(e) => setPrinterConfig({...printerConfig, printerPort: e.target.value})}
+                        placeholder="9100"
+                        type="number"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between border rounded-lg p-4">
+                  <div className="space-y-0.5">
+                    <Label>Auto-Print Receipts</Label>
+                    <p className="text-sm text-muted-foreground">Automatically print when payment is completed.</p>
+                  </div>
+                  <Switch 
+                    checked={printerConfig.autoPrint}
+                    onCheckedChange={(c) => setPrinterConfig({...printerConfig, autoPrint: c})}
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <Button onClick={savePrinterConfig}>
+                    <Save className="mr-2 h-4 w-4" /> Save Local Settings
+                  </Button>
+                  <Button variant="outline" onClick={handleTestPrint}>
+                    <Printer className="mr-2 h-4 w-4" /> Test Print
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="general">
           <Card>

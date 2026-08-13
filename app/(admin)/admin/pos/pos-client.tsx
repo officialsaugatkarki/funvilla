@@ -20,9 +20,7 @@ import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { printReceipt } from '@/lib/printing/print-bridge'
 import { isNativeAndroid } from '@/lib/printing/thermal-plugin'
-import { startPrintWorker, setPrintWorkerStatusCallback } from '@/lib/printing/print-worker'
 import { downloadReceiptImage } from '@/components/admin/receipt'
-import { printReceiptLocalBridge, testLocalBridge } from '@/lib/printing/local-bridge'
 
 interface CartItem {
   menuItemId: string
@@ -75,11 +73,8 @@ export default function POSClient({
   const [discountValue, setDiscountValue] = useState<string>('')
   const [discountType, setDiscountType] = useState<'percent' | 'fixed'>('percent')
 
-  // Print Worker Status
-  const [printServerStatus, setPrintServerStatus] = useState<'offline' | 'online' | 'error' | 'relay'>('relay')
-  const [printWorkerError, setPrintWorkerError] = useState<string | null>(null)
-
   const [isPending, startTransition] = useTransition()
+  const [isPrinting, setIsPrinting] = useState(false)
 
   // Realtime Orders
   useEffect(() => {
@@ -92,21 +87,6 @@ export default function POSClient({
       })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [])
-
-  // Background Print Worker (Android only)
-  // Connect local UI status to the global print worker
-  useEffect(() => {
-    if (!isNativeAndroid()) {
-      setPrintServerStatus('relay')
-      return
-    }
-
-    // Wire status updates into React state from the global worker
-    setPrintWorkerStatusCallback((status, message) => {
-      setPrintServerStatus(status)
-      if (message) setPrintWorkerError(message)
-    })
   }, [])
 
   const filtered = items.filter(item => {
@@ -220,6 +200,22 @@ export default function POSClient({
       
       // Remove from active orders locally to reflect immediately
       setActiveOrders(prev => prev.filter(o => o.id !== currentOrderId))
+
+      // Auto-print if enabled
+      if (isNativeAndroid()) {
+        try {
+          const stored = localStorage.getItem('pos_printer_config')
+          if (stored) {
+            const config = JSON.parse(stored)
+            if (config.autoPrint) {
+              printReceipt(completedOrder, paymentMethod, taxRate, serviceChargeRate)
+            }
+          } else {
+            // Default to auto-print if not configured
+            printReceipt(completedOrder, paymentMethod, taxRate, serviceChargeRate)
+          }
+        } catch (e) {}
+      }
     })
   }
 
@@ -245,21 +241,11 @@ export default function POSClient({
             <ListOrdered className="h-4 w-4 text-primary" /> Active Orders ({activeOrders.length})
           </h2>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 text-xs font-medium">
-              {printServerStatus === 'online' && <span className="text-emerald-600 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span> Print Server Active</span>}
-              {printServerStatus === 'relay' && <span className="text-muted-foreground">Print: Cloud Relay Mode</span>}
-              {printServerStatus === 'error' && <span className="text-destructive">Print Server Error!</span>}
-            </div>
             <Button variant="outline" size="sm" onClick={() => setPosMode('new_order')} className="h-8">
               <Plus className="h-3.5 w-3.5 mr-1" /> New Order
             </Button>
           </div>
         </div>
-        {printWorkerError && (
-          <p className="text-xs text-destructive bg-destructive/10 p-2 rounded-md font-medium">
-            DB Error: {printWorkerError}
-          </p>
-        )}
       </div>
       
       <div className="flex-1 overflow-y-auto min-h-0">
@@ -786,46 +772,14 @@ export default function POSClient({
             >
               <Download className="h-4 w-4" />
             </Button>
-            {/* Local Bridge Print — desktop/laptop only, hidden on Android */}
-            {!isNativeAndroid() && (
-              <div className="flex gap-2 flex-1">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={async () => {
-                    toast.info('Sending test print to Local Bridge...')
-                    const res = await testLocalBridge()
-                    if (res.ok) toast.success('Diagnostic printed via Bridge')
-                    else toast.error('Bridge failed: ' + res.error)
-                  }}
-                  title="Test Local Print Bridge connection (192.168.1.127:9100)"
-                >
-                  Bridge Test
-                </Button>
-                <Button
-                  variant="default"
-                  className="flex-1"
-                  onClick={async () => {
-                    toast.loading('Printing receipt...', { id: 'print-toast' })
-                    const res = await printReceiptLocalBridge(completedOrder, paymentMethod, taxRate, serviceChargeRate)
-                    if (res.ok) toast.success('Receipt printed!', { id: 'print-toast' })
-                    else toast.error('Print failed: ' + res.error, { id: 'print-toast', duration: 8000 })
-                  }}
-                  title="Print to ST-701UL via Local Bridge → TCP 192.168.1.127:9100"
-                >
-                  <Receipt className="mr-2 h-4 w-4" /> Print Receipt
-                </Button>
-              </div>
-            )}
             <Button
               className="flex-1"
-              variant={isNativeAndroid() ? 'default' : 'outline'}
+              variant="default"
               onClick={() => {
                 printReceipt(completedOrder, paymentMethod, taxRate, serviceChargeRate)
               }}
-              title="Print via Android App / Supabase relay"
             >
-              <Receipt className="mr-2 h-4 w-4" /> {isNativeAndroid() ? 'Print Receipt' : 'Print (Android relay)'}
+              <Receipt className="mr-2 h-4 w-4" /> Print Receipt
             </Button>
           </DialogFooter>
         </DialogContent>

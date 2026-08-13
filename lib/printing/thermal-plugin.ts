@@ -13,6 +13,7 @@ export interface PrintReceiptOptions {
   taxRate: number
   serviceChargeRate?: number
   paperWidth?: 58 | 80
+  connectionType?: 'usb' | 'network'
   printerIp?: string
   printerPort?: number
 }
@@ -98,8 +99,7 @@ export async function nativePrintReceipt(
     }>('ThermalPrinter')
 
     return await ThermalPrinter.printReceipt({
-      printerIp: '192.168.1.127',
-      printerPort: 9100,
+      connectionType: 'usb',
       paperWidth: 80,
       ...options,
     })

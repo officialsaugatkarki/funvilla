@@ -1,5 +1,17 @@
 package com.khukuri.restaurant
 
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.hardware.usb.UsbConstants
+import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbDeviceConnection
+import android.hardware.usb.UsbEndpoint
+import android.hardware.usb.UsbInterface
+import android.hardware.usb.UsbManager
+import android.os.Build
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
@@ -13,33 +25,17 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/**
- * ThermalPrinterPlugin.kt
- *
- * Capacitor native plugin that exposes printReceipt() to JavaScript.
- *
- * JavaScript call:
- *   const ThermalPrinter = registerPlugin('ThermalPrinter')
- *   await ThermalPrinter.printReceipt({ order, paymentMethod, taxRate, ... })
- *
- * The plugin:
- *  1. Parses the order JSON from JavaScript
- *  2. Builds ESC/POS bytes via EscPosHelper
- *  3. Opens a TCP socket to the printer (default: 192.168.1.127:9100)
- *  4. Sends the bytes
- *  5. Retries once on failure
- *  6. Returns success/error back to JavaScript
- */
 @CapacitorPlugin(name = "ThermalPrinter")
 class ThermalPrinterPlugin : Plugin() {
 
     companion object {
         private const val DEFAULT_IP = "192.168.1.127"
         private const val DEFAULT_PORT = 9100
-        private const val CONNECT_TIMEOUT_MS = 5000   // 5 seconds to connect
-        private const val WRITE_TIMEOUT_MS   = 8000   // 8 seconds to write all data
-        private const val MAX_RETRIES = 3              // Retry 3 times on failure
-        val RETRY_DELAYS_MS = arrayOf(2000L, 4000L, 6000L) // Exponential backoff for Wi-Fi roaming
+        private const val CONNECT_TIMEOUT_MS = 5000
+        private const val WRITE_TIMEOUT_MS   = 8000
+        private const val MAX_RETRIES = 3
+        val RETRY_DELAYS_MS = arrayOf(2000L, 4000L, 6000L)
+        private const val ACTION_USB_PERMISSION = "com.khukuri.restaurant.USB_PERMISSION"
     }
 
     private fun getLocalIpAddress(): String {
@@ -53,9 +49,7 @@ class ThermalPrinterPlugin : Plugin() {
                     }
                 }
             }
-        } catch (e: Exception) {
-            // ignore
-        }
+        } catch (e: Exception) {}
         return "Unknown"
     }
 
@@ -71,6 +65,7 @@ class ThermalPrinterPlugin : Plugin() {
 
     @PluginMethod
     fun printReceipt(call: PluginCall) {
+        val connectionType = call.getString("connectionType", "network") ?: "network"
         val printerIp   = call.getString("printerIp", DEFAULT_IP) ?: DEFAULT_IP
         val printerPort = call.getInt("printerPort", DEFAULT_PORT) ?: DEFAULT_PORT
         val paperWidth  = call.getInt("paperWidth", 80) ?: 80
@@ -79,13 +74,11 @@ class ThermalPrinterPlugin : Plugin() {
         val taxRate     = call.getDouble("taxRate") ?: 0.0
         val svcRate     = call.getDouble("serviceChargeRate") ?: 0.0
 
-        // Parse order object from JavaScript
         val orderObj = call.getObject("order") ?: run {
             call.reject("Missing order data")
             return
         }
 
-        // Parse items — support both 'items' (new order) and 'order_items' (active order)
         val items = mutableListOf<Triple<String, Int, Double>>()
         val itemsArray: JSONArray? = orderObj.optJSONArray("items")
             ?: orderObj.optJSONArray("order_items")
@@ -102,7 +95,6 @@ class ThermalPrinterPlugin : Plugin() {
             }
         }
 
-        // Financial fields
         val subtotal  = orderObj.optDouble("subtotal", 0.0)
         val discount  = orderObj.optDouble("discountAmount", 0.0)
             .takeIf { it > 0.0 } ?: orderObj.optDouble("discount_amount", 0.0)
@@ -112,7 +104,6 @@ class ThermalPrinterPlugin : Plugin() {
             .takeIf { it > 0.0 } ?: orderObj.optDouble("service_charge_amount", 0.0)
         val grandTotal = orderObj.optDouble("total", 0.0)
 
-        // Date/time formatting
         val createdAt = orderObj.optString("created_at", "")
         val (dateStr, timeStr) = try {
             val d = if (createdAt.isNotEmpty()) Date(createdAt) else Date()
@@ -131,7 +122,6 @@ class ThermalPrinterPlugin : Plugin() {
         val orderNumber = orderObj.optString("order_number", "-")
         val orderType   = (orderObj.optString("order_type", "dine_in")).replace("_", " ")
 
-        // Extract table number — check nested restaurant_tables object first, then flat field
         val tableNumber = run {
             val nested = orderObj.optJSONObject("restaurant_tables")
             nested?.optString("table_number", "")
@@ -139,7 +129,6 @@ class ThermalPrinterPlugin : Plugin() {
                 ?: orderObj.optString("table_number", "")
         }
 
-        // Build ESC/POS bytes
         val receiptBytes = EscPosHelper.buildReceipt(
             orderNumber  = orderNumber,
             orderDate    = dateStr,
@@ -158,7 +147,141 @@ class ThermalPrinterPlugin : Plugin() {
             paperWidthMm = paperWidth
         )
 
-        // Run printing on a background thread (network I/O must not block UI thread)
+        // Keep call alive so we can resolve it asynchronously
+        call.setKeepAlive(true)
+
+        if (connectionType == "usb") {
+            printUsb(call, receiptBytes)
+        } else {
+            printNetwork(call, printerIp, printerPort, receiptBytes)
+        }
+    }
+
+    private fun printUsb(call: PluginCall, receiptBytes: ByteArray) {
+        val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
+        val deviceList = usbManager.deviceList
+        var printerDevice: UsbDevice? = null
+        
+        for (device in deviceList.values) {
+            val isPrinter = (device.deviceClass == UsbConstants.USB_CLASS_PRINTER) || 
+                (0 until device.interfaceCount).any { device.getInterface(it).interfaceClass == UsbConstants.USB_CLASS_PRINTER }
+            if (isPrinter) {
+                printerDevice = device
+                break
+            }
+        }
+        
+        if (printerDevice == null) {
+            resolveError(call, "Printer not connected. Please check the USB cable and try again.")
+            return
+        }
+        
+        if (usbManager.hasPermission(printerDevice)) {
+            doUsbPrint(usbManager, printerDevice, call, receiptBytes)
+        } else {
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    val action = intent.action
+                    if (ACTION_USB_PERMISSION == action) {
+                        context.unregisterReceiver(this)
+                        synchronized(this) {
+                            @Suppress("DEPRECATION")
+                            val device = intent.getParcelableExtra<UsbDevice>(UsbManager.EXTRA_DEVICE)
+                            if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
+                                if (device != null) {
+                                    doUsbPrint(usbManager, device, call, receiptBytes)
+                                } else {
+                                    resolveError(call, "Printer device not found after permission granted")
+                                }
+                            } else {
+                                resolveError(call, "Printer permission is required. Please allow access to the connected printer.")
+                            }
+                        }
+                    }
+                }
+            }
+            
+            val intentFilter = IntentFilter(ACTION_USB_PERMISSION)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.registerReceiver(receiver, intentFilter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                context.registerReceiver(receiver, intentFilter)
+            }
+            
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
+            val permissionIntent = PendingIntent.getBroadcast(context, 0, Intent(ACTION_USB_PERMISSION), flags)
+            
+            usbManager.requestPermission(printerDevice, permissionIntent)
+        }
+    }
+
+    private fun doUsbPrint(usbManager: UsbManager, device: UsbDevice, call: PluginCall, receiptBytes: ByteArray) {
+        Thread {
+            try {
+                var printerInterface: UsbInterface? = null
+                for (i in 0 until device.interfaceCount) {
+                    val intf = device.getInterface(i)
+                    if (intf.interfaceClass == UsbConstants.USB_CLASS_PRINTER) {
+                        printerInterface = intf
+                        break
+                    }
+                }
+                
+                if (printerInterface == null) {
+                    resolveError(call, "Could not find printer interface on USB device.")
+                    return@Thread
+                }
+                
+                var bulkOut: UsbEndpoint? = null
+                for (i in 0 until printerInterface.endpointCount) {
+                    val endpoint = printerInterface.getEndpoint(i)
+                    if (endpoint.type == UsbConstants.USB_ENDPOINT_XFER_BULK && endpoint.direction == UsbConstants.USB_DIR_OUT) {
+                        bulkOut = endpoint
+                        break
+                    }
+                }
+                
+                if (bulkOut == null) {
+                    resolveError(call, "Could not find bulk OUT endpoint on printer.")
+                    return@Thread
+                }
+                
+                val connection: UsbDeviceConnection? = usbManager.openDevice(device)
+                if (connection == null) {
+                    resolveError(call, "Could not open USB connection. Please try reconnecting the printer.")
+                    return@Thread
+                }
+                
+                try {
+                    connection.claimInterface(printerInterface, true)
+                    
+                    var offset = 0
+                    val chunkSize = 4096
+                    while (offset < receiptBytes.size) {
+                        val length = minOf(chunkSize, receiptBytes.size - offset)
+                        val transferred = connection.bulkTransfer(bulkOut, receiptBytes, offset, length, 5000)
+                        if (transferred < 0) {
+                            throw Exception("USB bulkTransfer failed.")
+                        }
+                        offset += transferred
+                    }
+                    
+                    val result = JSObject()
+                    result.put("success", true)
+                    call.resolve(result)
+                    call.releaseRetainedArguments()
+                } finally {
+                    connection.releaseInterface(printerInterface)
+                    connection.close()
+                }
+                
+            } catch (e: Exception) {
+                resolveError(call, "Could not print the receipt. Please check that the printer is connected and turned on.")
+            }
+        }.start()
+    }
+
+    private fun printNetwork(call: PluginCall, printerIp: String, printerPort: Int, receiptBytes: ByteArray) {
         Thread {
             var lastError: String? = null
             var success = false
@@ -166,8 +289,6 @@ class ThermalPrinterPlugin : Plugin() {
             for (attempt in 0..MAX_RETRIES) {
                 try {
                     val localIp = getLocalIpAddress()
-
-                    // Log diagnostic info but do NOT block — attempt connection regardless of subnet
                     val sameSubnet = isSameSubnet(localIp, printerIp)
                     android.util.Log.d("ThermalPrinter",
                         "Attempt ${attempt + 1}/$MAX_RETRIES | " +
@@ -181,8 +302,7 @@ class ThermalPrinterPlugin : Plugin() {
                 } catch (e: java.net.SocketTimeoutException) {
                     lastError = "Printer offline or timed out. Make sure the printer is on and connected to the same network."
                 } catch (e: java.net.ConnectException) {
-                    lastError = "Cannot reach printer at $printerIp:$printerPort. " +
-                        "If you are on 'Khukuri Restaurant' WiFi, ensure both routers share the same LAN."
+                    lastError = "Cannot reach printer at $printerIp:$printerPort. If you are on 'Khukuri Restaurant' WiFi, ensure both routers share the same LAN."
                 } catch (e: Exception) {
                     lastError = "Print error: ${e.message}"
                 }
@@ -193,34 +313,35 @@ class ThermalPrinterPlugin : Plugin() {
                 }
             }
 
-            val result = JSObject()
             if (success) {
+                val result = JSObject()
                 result.put("success", true)
                 call.resolve(result)
+                call.releaseRetainedArguments()
             } else {
-                result.put("success", false)
-                result.put("error", lastError ?: "Unknown printer error")
-                call.resolve(result) // Resolve (not reject) so JS can handle the error gracefully
+                resolveError(call, lastError ?: "Unknown printer error")
             }
         }.start()
     }
 
-    /**
-     * Opens a TCP socket to the printer, sends bytes, and closes the connection.
-     * Throws on timeout or connection error.
-     */
     private fun sendToPrinter(ip: String, port: Int, data: ByteArray) {
         val socket = Socket()
         try {
-            // Connect with timeout
             socket.connect(InetSocketAddress(ip, port), CONNECT_TIMEOUT_MS)
             socket.soTimeout = WRITE_TIMEOUT_MS
-
             val out: OutputStream = socket.getOutputStream()
             out.write(data)
             out.flush()
         } finally {
             try { socket.close() } catch (_: Exception) {}
         }
+    }
+
+    private fun resolveError(call: PluginCall, message: String) {
+        val result = JSObject()
+        result.put("success", false)
+        result.put("error", message)
+        call.resolve(result)
+        call.releaseRetainedArguments()
     }
 }

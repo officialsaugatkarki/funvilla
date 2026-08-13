@@ -96,11 +96,40 @@ export async function printReceipt(
 ): Promise<void> {
   if (!order) { toast.error('No order data to print.'); return }
 
-  // ── Path 1: Android Capacitor APK — direct TCP ───────────────────────────────
+  // ── Path 1: Android Capacitor APK — direct native plugin ───────────────────────────────
   if (isNativeAndroid()) {
     toast.loading('Sending to printer...', { id: 'print-toast' })
-    plog(`PATH 1: Android native APK → TCP ${PRINTER_IP}:${PRINTER_PORT}`)
-    const result = await nativePrintReceipt({ order, paymentMethod, taxRate, serviceChargeRate, paperWidth, printerIp: PRINTER_IP, printerPort: PRINTER_PORT })
+    
+    // Load config from localStorage (set via Settings -> Printer)
+    let connectionType: 'usb' | 'network' = 'usb'
+    let printerIp = '192.168.1.127'
+    let printerPort = 9100
+    let configPaperWidth: 58 | 80 = paperWidth
+    
+    try {
+      const stored = localStorage.getItem('pos_printer_config')
+      if (stored) {
+        const config = JSON.parse(stored)
+        if (config.connectionType) connectionType = config.connectionType
+        if (config.printerIp) printerIp = config.printerIp
+        if (config.printerPort) printerPort = parseInt(config.printerPort, 10)
+        if (config.paperWidth) configPaperWidth = parseInt(config.paperWidth, 10) as 58 | 80
+      }
+    } catch (e) {
+      console.warn('Could not read printer config, using defaults', e)
+    }
+
+    plog(`PATH 1: Android native APK → ${connectionType.toUpperCase()}`)
+    const result = await nativePrintReceipt({ 
+      order, 
+      paymentMethod, 
+      taxRate, 
+      serviceChargeRate, 
+      paperWidth: configPaperWidth, 
+      connectionType,
+      printerIp, 
+      printerPort 
+    })
     plog('PATH 1 result:', result)
     if (result.success) {
       toast.success('Receipt printed!', { id: 'print-toast' })
