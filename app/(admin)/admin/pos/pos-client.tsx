@@ -798,7 +798,7 @@ export default function POSClient({
                     if (res.ok) toast.success('Diagnostic printed via Bridge')
                     else toast.error('Bridge failed: ' + res.error)
                   }}
-                  title="Test Local Print Bridge connection"
+                  title="Test Local Print Bridge connection (192.168.1.127:9100)"
                 >
                   Bridge Test
                 </Button>
@@ -806,25 +806,26 @@ export default function POSClient({
                   variant="default"
                   className="flex-1"
                   onClick={async () => {
+                    toast.loading('Printing receipt...', { id: 'print-toast' })
                     const res = await printReceiptLocalBridge(completedOrder, paymentMethod, taxRate, serviceChargeRate)
-                    if (res.ok) toast.success('Receipt sent to Local Bridge')
-                    else toast.error('Bridge failed: ' + res.error)
+                    if (res.ok) toast.success('Receipt printed!', { id: 'print-toast' })
+                    else toast.error('Print failed: ' + res.error, { id: 'print-toast', duration: 8000 })
                   }}
-                  title="Print to Windows thermal printer via Local Bridge"
+                  title="Print to ST-701UL via Local Bridge → TCP 192.168.1.127:9100"
                 >
-                  <Receipt className="mr-2 h-4 w-4" /> Print (Local)
+                  <Receipt className="mr-2 h-4 w-4" /> Print Receipt
                 </Button>
               </div>
             )}
             <Button
               className="flex-1"
-              variant="default"
+              variant={isNativeAndroid() ? 'default' : 'outline'}
               onClick={() => {
                 printReceipt(completedOrder, paymentMethod, taxRate, serviceChargeRate)
               }}
-              title="Print via Android App / TCP Network"
+              title="Print via Android App / Supabase relay"
             >
-              <Receipt className="mr-2 h-4 w-4" /> Print (Network)
+              <Receipt className="mr-2 h-4 w-4" /> {isNativeAndroid() ? 'Print Receipt' : 'Print (Android relay)'}
             </Button>
           </DialogFooter>
         </DialogContent>
