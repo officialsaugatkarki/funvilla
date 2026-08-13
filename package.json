@@ -84,6 +84,7 @@
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/w3c-web-usb": "^1.0.14",
     "postcss": "^8.5",
     "puppeteer": "^25.5.0",
     "pwa-asset-generator": "^8.1.5",

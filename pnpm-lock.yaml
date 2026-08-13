@@ -222,6 +222,9 @@ importers:
       '@types/react-dom':
         specifier: ^19
         version: 19.2.3(@types/react@19.2.14)
+      '@types/w3c-web-usb':
+        specifier: ^1.0.14
+        version: 1.0.14
       postcss:
         specifier: ^8.5
         version: 8.5.6
@@ -2138,6 +2141,9 @@ packages:
 
   '@types/trusted-types@2.0.7':
     resolution: {integrity: sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw==}
+
+  '@types/w3c-web-usb@1.0.14':
+    resolution: {integrity: sha512-Qu3Nn6JFuF4+sHKYl+IcX9vYiI40ogleXzFFSxoE1W94rG98o/kXs8uJ0QSfFzuwBCZWlGfUGpPkgwuuX4PchA==}
 
   '@types/webxr@0.5.24':
     resolution: {integrity: sha512-h8fgEd/DpoS9CBrjEQXR+dIDraopAEfu4wYVNY2tEPwk60stPWhvZMf4Foo5FakuQ7HFZoa8WceaWFervK2Ovg==}
@@ -7744,6 +7750,8 @@ snapshots:
       meshoptimizer: 1.1.1
 
   '@types/trusted-types@2.0.7': {}
+
+  '@types/w3c-web-usb@1.0.14': {}
 
   '@types/webxr@0.5.24': {}
 
