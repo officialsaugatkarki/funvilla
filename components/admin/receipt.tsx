@@ -131,7 +131,10 @@ export function buildReceiptHtml(
   }).join('')
 
   const tableNum = order.restaurant_tables?.table_number
-    ? `<tr>${tableRow('Table', order.restaurant_tables.table_number)}</tr>` : ''
+    ? tableRow('Table', order.restaurant_tables.table_number) : ''
+
+  const tableSection = order.restaurant_tables?.section
+    ? tableRow('Area', order.restaurant_tables.section) : ''
 
   const discountRow = discount > 0
     ? tableRow('Discount', `− NPR ${fmt(discount)}`, false, '#16a34a') : ''
@@ -190,6 +193,7 @@ export function buildReceiptHtml(
     ${tableRow('Date', dateStr)}
     ${tableRow('Time', timeStr)}
     ${tableRow('Type', orderType.charAt(0).toUpperCase() + orderType.slice(1))}
+    ${tableSection}
     ${tableNum}
     ${tableRow('Payment', paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1))}
   </table>

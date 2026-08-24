@@ -113,6 +113,7 @@ object EscPosHelper {
         orderTime: String,
         orderType: String,
         tableNumber: String,
+        tableSection: String = "",
         paymentMethod: String,
         items: List<Triple<String, Int, Double>>,
         subtotal: Double,
@@ -153,6 +154,9 @@ object EscPosHelper {
         line(labelRow("Date", orderDate, W))
         line(labelRow("Time", orderTime, W))
         line(labelRow("Type", orderType, W))
+        if (tableSection.isNotBlank()) {
+            line(labelRow("Area", tableSection, W))
+        }
         if (tableNumber.isNotBlank()) {
             line(labelRow("Table", tableNumber, W))
         }

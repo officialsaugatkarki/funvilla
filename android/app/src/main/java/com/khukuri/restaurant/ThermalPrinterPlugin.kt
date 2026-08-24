@@ -129,12 +129,20 @@ class ThermalPrinterPlugin : Plugin() {
                 ?: orderObj.optString("table_number", "")
         }
 
+        val tableSection = run {
+            val nested = orderObj.optJSONObject("restaurant_tables")
+            nested?.optString("section", "")
+                ?.takeIf { it.isNotBlank() }
+                ?: orderObj.optString("section", "")
+        }
+
         val receiptBytes = EscPosHelper.buildReceipt(
             orderNumber  = orderNumber,
             orderDate    = dateStr,
             orderTime    = timeStr,
             orderType    = orderType,
             tableNumber  = tableNumber,
+            tableSection = tableSection,
             paymentMethod = payMethod,
             items        = items,
             subtotal     = subtotal,
