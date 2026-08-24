@@ -103,7 +103,10 @@ export function printReceiptBrowser(
   order: any,
   paymentMethod: string,
   taxRate: number,
-  serviceChargeRate: number = 0
+  serviceChargeRate: number = 0,
+  paperWidth: 58 | 80 = 80,
+  waiter: string = '',
+  isPaid: boolean = true
 ): void {
   if (!order) {
     toast.error('No order data to print.')
@@ -113,7 +116,7 @@ export function printReceiptBrowser(
   plog('PATH A: Desktop browser → window.print()')
 
   try {
-    const html = buildReceiptHtml(order, paymentMethod, taxRate, serviceChargeRate)
+    const html = buildReceiptHtml(order, paymentMethod, taxRate, serviceChargeRate, waiter, isPaid)
 
     // Open a small popup window — this is the cleanest cross-browser approach.
     // The HTML document auto-calls window.print() on load (see buildReceiptHtml).
@@ -178,13 +181,14 @@ export async function printReceipt(
   paymentMethod: string,
   taxRate: number,
   serviceChargeRate: number = 0,
-  paperWidth: 58 | 80 = 80
+  paperWidth: 58 | 80 = 80,
+  waiter: string = '',
+  isPaid: boolean = true
 ): Promise<void> {
   if (!order) { toast.error('No order data to print.'); return }
 
   // ── PATH 1: Android Native App — direct Network to thermal printer ──────────
-  // Default: 192.168.1.127:9100 over TCP (same design as original).
-  // Can be overridden via pos_printer_config in localStorage if needed.
+  // Default: 192.168.1.127:9100 over TCP. Overridable via pos_printer_config.
   if (isNativeAndroid()) {
     let connectionType: 'usb' | 'network' = 'network'
     let printerIp = '192.168.1.127'
@@ -215,7 +219,9 @@ export async function printReceipt(
       paperWidth: configPaperWidth,
       connectionType,
       printerIp,
-      printerPort
+      printerPort,
+      waiter,
+      isPaid,
     })
 
     plog('PATH 1 result:', result)
@@ -231,8 +237,7 @@ export async function printReceipt(
     return
   }
 
-  // ── PATH 2: Locally-configured device (browser with pos_printer_config set) ──
-  // e.g. a browser-based tablet that has been explicitly configured with a printer IP
+  // ── PATH 2: Locally-configured browser device with printer IP ───────────────
   try {
     const stored = localStorage.getItem('pos_printer_config')
     if (stored) {
@@ -248,12 +253,24 @@ export async function printReceipt(
           connectionType: 'network',
           printerIp: config.printerIp,
           printerPort: config.printerPort ? parseInt(config.printerPort, 10) : 9100,
+          waiter,
+          isPaid,
         })
         if (result.success) {
           toast.success('Receipt printed!', { id: 'print-toast' })
           return
         }
-        // If it failed, fall through to desktop browser print
+        plog('PATH 2: Local config print failed, falling through:', result.error)
+      }
+    }
+  } catch (e) {
+    plog('PATH 2: Could not read/use local printer config:', e)
+  }
+
+  // ── PATH 3: Desktop browser / Mac / Windows → OS native print dialog ────────
+  plog('PATH 3: Desktop browser → OS print dialog (window.print)')
+  printReceiptBrowser(order, paymentMethod, taxRate, serviceChargeRate, paperWidth, waiter, isPaid)
+}op browser print
         plog('PATH 2: Local config print failed, falling through:', result.error)
       }
     }

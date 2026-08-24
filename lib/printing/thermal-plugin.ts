@@ -16,6 +16,8 @@ export interface PrintReceiptOptions {
   connectionType?: 'usb' | 'network'
   printerIp?: string
   printerPort?: number
+  waiter?: string
+  isPaid?: boolean
 }
 
 export interface PrintResult {

@@ -73,6 +73,8 @@ class ThermalPrinterPlugin : Plugin() {
             .replaceFirstChar { it.uppercase() }
         val taxRate     = call.getDouble("taxRate") ?: 0.0
         val svcRate     = call.getDouble("serviceChargeRate") ?: 0.0
+        val waiter      = call.getString("waiter") ?: ""
+        val isPaid      = call.getBoolean("isPaid") ?: true
 
         val orderObj = call.getObject("order") ?: run {
             call.reject("Missing order data")
@@ -143,6 +145,8 @@ class ThermalPrinterPlugin : Plugin() {
             orderType    = orderType,
             tableNumber  = tableNumber,
             tableSection = tableSection,
+            waiter       = waiter,
+            isPaid       = isPaid,
             paymentMethod = payMethod,
             items        = items,
             subtotal     = subtotal,

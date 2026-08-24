@@ -114,6 +114,8 @@ object EscPosHelper {
         orderType: String,
         tableNumber: String,
         tableSection: String = "",
+        waiter: String = "",
+        isPaid: Boolean = true,
         paymentMethod: String,
         items: List<Triple<String, Int, Double>>,
         subtotal: Double,
@@ -160,7 +162,13 @@ object EscPosHelper {
         if (tableNumber.isNotBlank()) {
             line(labelRow("Table", tableNumber, W))
         }
+        if (waiter.isNotBlank()) {
+            line(labelRow("Served By", waiter, W))
+        }
         line(labelRow("Payment", paymentMethod.replaceFirstChar { it.uppercase() }, W))
+        add(if (isPaid) BOLD_ON else BOLD_OFF)
+        line(labelRow("Status", if (isPaid) "PAID" else "UNPAID", W))
+        add(BOLD_OFF)
         div('-')
 
         // ── Items ────────────────────────────────────────────────────────────

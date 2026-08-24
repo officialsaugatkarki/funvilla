@@ -99,7 +99,9 @@ export function buildReceiptHtml(
   order: any,
   paymentMethod: string,
   taxRate: number,
-  serviceChargeRate: number = 0
+  serviceChargeRate: number = 0,
+  waiter: string = '',
+  isPaid: boolean = true
 ): string {
   if (!order) return ''
 
@@ -135,6 +137,9 @@ export function buildReceiptHtml(
 
   const tableSection = order.restaurant_tables?.section
     ? tableRow('Area', order.restaurant_tables.section) : ''
+
+  const waiterRow = waiter ? tableRow('Served By', waiter) : ''
+  const paymentStatusRow = tableRow('Status', isPaid ? 'PAID' : 'UNPAID', true)
 
   const discountRow = discount > 0
     ? tableRow('Discount', `− NPR ${fmt(discount)}`, false, '#16a34a') : ''
@@ -195,7 +200,9 @@ export function buildReceiptHtml(
     ${tableRow('Type', orderType.charAt(0).toUpperCase() + orderType.slice(1))}
     ${tableSection}
     ${tableNum}
+    ${waiterRow}
     ${tableRow('Payment', paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1))}
+    ${paymentStatusRow}
   </table>
 
   <div class="divider-dash"></div>

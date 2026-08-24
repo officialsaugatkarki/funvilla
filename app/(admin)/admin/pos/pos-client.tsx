@@ -69,6 +69,10 @@ export default function POSClient({
   // Receipt
   const [isReceiptOpen, setIsReceiptOpen] = useState(false)
   const [completedOrder, setCompletedOrder] = useState<any>(null)
+  const [selectedWaiter, setSelectedWaiter] = useState<string>('')
+  const [isPaidBill, setIsPaidBill] = useState<boolean>(true)
+
+  const WAITERS = ['Susmita', 'Apsana']
 
   const [discountValue, setDiscountValue] = useState<string>('')
   const [discountType, setDiscountType] = useState<'percent' | 'fixed'>('percent')
@@ -230,6 +234,8 @@ export default function POSClient({
     setSplitBy(1)
     setPosMode('new_order')
     setMobileTab('menu')
+    setSelectedWaiter('')
+    setIsPaidBill(true)
   }
 
   // ── Active Orders Panel ────────────────────────────────────────────────────
@@ -750,15 +756,64 @@ export default function POSClient({
           <DialogHeader className="sr-only">
             <DialogTitle>Receipt Options</DialogTitle>
           </DialogHeader>
-          <div className="text-center py-8 space-y-4">
+
+          {/* Success header */}
+          <div className="text-center py-6 space-y-3">
             <div className="h-16 w-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
               <CheckCircle2 className="h-8 w-8" />
             </div>
             <h2 className="text-xl font-bold">Payment Successful</h2>
-            <p className="text-sm text-muted-foreground">Order #{completedOrder?.order_number} has been paid and completed.</p>
+            <p className="text-sm text-muted-foreground">Order #{completedOrder?.order_number}</p>
           </div>
 
-          <DialogFooter className="flex-col sm:flex-row gap-2 mt-4">
+          {/* ── Waiter selector ─────────────────────────── */}
+          <div className="space-y-2 px-1">
+            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Served By (Waiter)</Label>
+            <div className="flex gap-2">
+              {WAITERS.map(w => (
+                <button
+                  key={w}
+                  onClick={() => setSelectedWaiter(prev => prev === w ? '' : w)}
+                  className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-all ${
+                    selectedWaiter === w
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-background border-border hover:bg-muted'
+                  }`}
+                >
+                  {w}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Paid / Unpaid toggle ─────────────────────── */}
+          <div className="space-y-2 px-1">
+            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Payment Status</Label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setIsPaidBill(true)}
+                className={`flex-1 py-2 px-3 rounded-lg border text-sm font-semibold transition-all ${
+                  isPaidBill
+                    ? 'bg-emerald-500 text-white border-emerald-500'
+                    : 'bg-background border-border hover:bg-muted'
+                }`}
+              >
+                ✓ PAID
+              </button>
+              <button
+                onClick={() => setIsPaidBill(false)}
+                className={`flex-1 py-2 px-3 rounded-lg border text-sm font-semibold transition-all ${
+                  !isPaidBill
+                    ? 'bg-red-500 text-white border-red-500'
+                    : 'bg-background border-border hover:bg-muted'
+                }`}
+              >
+                ✗ UNPAID
+              </button>
+            </div>
+          </div>
+
+          <DialogFooter className="flex-col sm:flex-row gap-2 mt-2">
             <Button variant="outline" className="flex-1" onClick={resetPOS}>
               Close &amp; New
             </Button>
@@ -776,7 +831,7 @@ export default function POSClient({
               className="flex-1"
               variant="default"
               onClick={() => {
-                printReceipt(completedOrder, paymentMethod, taxRate, serviceChargeRate)
+                printReceipt(completedOrder, paymentMethod, taxRate, serviceChargeRate, 80, selectedWaiter, isPaidBill)
               }}
             >
               <Receipt className="mr-2 h-4 w-4" />
@@ -785,7 +840,7 @@ export default function POSClient({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      
+
       {/* Receipt HTML is built via buildReceiptHtml for browser printing, ESC/POS for Android */}
     </>
   )
