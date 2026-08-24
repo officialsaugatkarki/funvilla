@@ -182,9 +182,11 @@ export async function printReceipt(
 ): Promise<void> {
   if (!order) { toast.error('No order data to print.'); return }
 
-  // ── PATH 1: Android Native App — direct USB/Network to thermal printer ──────
+  // ── PATH 1: Android Native App — direct Network to thermal printer ──────────
+  // Default: 192.168.1.127:9100 over TCP (same design as original).
+  // Can be overridden via pos_printer_config in localStorage if needed.
   if (isNativeAndroid()) {
-    let connectionType: 'usb' | 'network' = 'usb'
+    let connectionType: 'usb' | 'network' = 'network'
     let printerIp = '192.168.1.127'
     let printerPort = 9100
     let configPaperWidth: 58 | 80 = paperWidth
@@ -202,7 +204,7 @@ export async function printReceipt(
       console.warn('Could not read printer config, using defaults', e)
     }
 
-    toast.loading(`Sending to ${connectionType.toUpperCase()} printer...`, { id: 'print-toast' })
+    toast.loading(`Printing receipt...`, { id: 'print-toast' })
     plog(`PATH 1: Android Native → ${connectionType.toUpperCase()}`)
 
     const result = await nativePrintReceipt({
