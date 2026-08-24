@@ -18,7 +18,7 @@ import Image from 'next/image'
 import { createOrder, processPayment, getActiveOrdersForPOS } from '@/lib/actions/orders.actions'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
-import { printReceipt } from '@/lib/printing/print-bridge'
+import { printReceipt, isDesktopBrowser } from '@/lib/printing/print-bridge'
 import { isNativeAndroid } from '@/lib/printing/thermal-plugin'
 import { downloadReceiptImage } from '@/components/admin/receipt'
 
@@ -201,7 +201,7 @@ export default function POSClient({
       // Remove from active orders locally to reflect immediately
       setActiveOrders(prev => prev.filter(o => o.id !== currentOrderId))
 
-      // Auto-print if enabled
+      // Auto-print if on Android with autoPrint enabled
       if (isNativeAndroid()) {
         try {
           const stored = localStorage.getItem('pos_printer_config')
@@ -760,7 +760,7 @@ export default function POSClient({
 
           <DialogFooter className="flex-col sm:flex-row gap-2 mt-4">
             <Button variant="outline" className="flex-1" onClick={resetPOS}>
-              Close & New
+              Close &amp; New
             </Button>
             <Button
               variant="secondary"
@@ -768,7 +768,7 @@ export default function POSClient({
               onClick={() => {
                 downloadReceiptImage(completedOrder, paymentMethod, taxRate, serviceChargeRate)
               }}
-              title="Download Receipt (For mobile/manual printing)"
+              title="Download Receipt as Image"
             >
               <Download className="h-4 w-4" />
             </Button>
@@ -779,13 +779,14 @@ export default function POSClient({
                 printReceipt(completedOrder, paymentMethod, taxRate, serviceChargeRate)
               }}
             >
-              <Receipt className="mr-2 h-4 w-4" /> Print Receipt
+              <Receipt className="mr-2 h-4 w-4" />
+              {isNativeAndroid() ? 'Print (Thermal)' : 'Print Receipt'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
       
-      {/* Receipt is now generated purely in JS via buildReceiptHtml */}
+      {/* Receipt HTML is built via buildReceiptHtml for browser printing, ESC/POS for Android */}
     </>
   )
 }

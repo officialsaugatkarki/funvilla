@@ -4,12 +4,12 @@
  * Single entry point for ALL printing across all platforms.
  *
  * Routing:
- *   Android Capacitor APK  →  TCP → 192.168.1.127:9100  (native plugin)
+ *   Android Capacitor APK  →  USB / TCP → native ESC/POS printer (direct)
+ *   Desktop browser (Mac, Windows, Linux) → window.print() → OS printer dialog
  *   iPhone Safari PWA      →  Supabase relay → Android worker → printer
- *   Desktop browser        →  Supabase relay → Android worker → printer
  *
- * window.print() is NEVER called.
- * Browser print dialogs are NEVER opened.
+ * window.print() IS now used for desktop browsers.
+ * The Supabase relay is used only for iPhone/iPad PWA.
  */
 
 'use client'
@@ -18,27 +18,34 @@ import { toast } from 'sonner'
 import { isNativeAndroid, nativePrintReceipt, isPOSWorkerMode } from './thermal-plugin'
 import { createPrintJob } from '@/lib/actions/print.actions'
 import { createClient } from '@/lib/supabase/client'
+import { buildReceiptHtml } from '@/components/admin/receipt'
 
-const PRINTER_IP     = '192.168.1.127'
-const PRINTER_PORT   = 9100
-const RELAY_TIMEOUT  = 45_000   // 45s hard timeout
-const POLL_INTERVAL  = 2_000    // Poll every 2s as fallback (Realtime can miss events)
-const HEARTBEAT_STALE = 60_000  // 60s = POS is offline
+const RELAY_TIMEOUT   = 45_000   // 45s hard timeout
+const POLL_INTERVAL   = 2_000    // Poll every 2s as fallback (Realtime can miss events)
+const HEARTBEAT_STALE = 60_000   // 60s = POS is offline
 
 function plog(msg: string, data?: any) {
   const ts = new Date().toISOString()
   data !== undefined
-    ? console.log(`[iPhone→Printer ${ts}] ${msg}`, data)
-    : console.log(`[iPhone→Printer ${ts}] ${msg}`)
+    ? console.log(`[Print ${ts}] ${msg}`, data)
+    : console.log(`[Print ${ts}] ${msg}`)
 }
 
-// ─── iOS PWA detection ────────────────────────────────────────────────────────
+// ─── Platform detection ───────────────────────────────────────────────────────
+
+/** True when running as a standalone iOS PWA (Add to Home Screen) */
 export function isIOSPWA(): boolean {
   if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
   return (
     window.matchMedia?.('(display-mode: standalone)').matches ||
     (navigator as any).standalone === true
   )
+}
+
+/** True when running in any regular desktop/laptop browser (not Android native, not POS worker) */
+export function isDesktopBrowser(): boolean {
+  if (typeof window === 'undefined') return false
+  return !isNativeAndroid() && !isPOSWorkerMode()
 }
 
 export function isBrowserClient(): boolean {
@@ -86,6 +93,85 @@ export async function getPrintServerDiagnostics(): Promise<PrintServerDiagnostic
   }
 }
 
+// ─── PATH A: Desktop browser → OS native print dialog ────────────────────────
+/**
+ * Opens the receipt in a small popup window and triggers window.print().
+ * This opens the OS native printer dialog on Mac, Windows, Linux, etc.
+ * The user can choose any printer (including PDF).
+ */
+export function printReceiptBrowser(
+  order: any,
+  paymentMethod: string,
+  taxRate: number,
+  serviceChargeRate: number = 0
+): void {
+  if (!order) {
+    toast.error('No order data to print.')
+    return
+  }
+
+  plog('PATH A: Desktop browser → window.print()')
+
+  try {
+    const html = buildReceiptHtml(order, paymentMethod, taxRate, serviceChargeRate)
+
+    // Open a small popup window — this is the cleanest cross-browser approach.
+    // The HTML document auto-calls window.print() on load (see buildReceiptHtml).
+    const popup = window.open('', '_blank', 'width=400,height=700,scrollbars=yes,resizable=yes')
+    if (!popup) {
+      // Popup blocked — fall back to a hidden iframe approach
+      plog('PATH A: Popup blocked, falling back to iframe print')
+      printViaIframe(html)
+      return
+    }
+
+    popup.document.open()
+    popup.document.write(html)
+    popup.document.close()
+
+    // Some browsers need a short delay before the print dialog fires
+    popup.addEventListener('afterprint', () => {
+      popup.close()
+    })
+
+    toast.success('Print dialog opened!', { duration: 3000 })
+    plog('PATH A: Popup opened successfully')
+  } catch (e: any) {
+    plog('PATH A ERROR:', e?.message)
+    toast.error(`Print error: ${e?.message ?? 'Could not open print dialog'}`)
+  }
+}
+
+/** Fallback: inject a hidden iframe, write receipt HTML into it, and print */
+function printViaIframe(html: string): void {
+  // Remove any previous print frame
+  const existing = document.getElementById('receipt-print-frame')
+  if (existing) existing.remove()
+
+  const iframe = document.createElement('iframe')
+  iframe.id = 'receipt-print-frame'
+  iframe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;border:none;opacity:0;pointer-events:none;'
+  document.body.appendChild(iframe)
+
+  const doc = iframe.contentWindow?.document
+  if (!doc) {
+    toast.error('Could not open print frame. Please allow popups for this site.')
+    return
+  }
+
+  doc.open()
+  doc.write(html)
+  doc.close()
+
+  // Wait for resources to load before printing
+  iframe.onload = () => {
+    iframe.contentWindow?.print()
+    toast.success('Print dialog opened!', { duration: 3000 })
+    // Clean up after print
+    setTimeout(() => iframe.remove(), 5000)
+  }
+}
+
 // ─── Main print function ──────────────────────────────────────────────────────
 export async function printReceipt(
   order: any,
@@ -96,16 +182,13 @@ export async function printReceipt(
 ): Promise<void> {
   if (!order) { toast.error('No order data to print.'); return }
 
-  // ── Path 1: Android Capacitor APK — direct native plugin ───────────────────────────────
+  // ── PATH 1: Android Native App — direct USB/Network to thermal printer ──────
   if (isNativeAndroid()) {
-    toast.loading('Sending to printer...', { id: 'print-toast' })
-    
-    // Load config from localStorage (set via Settings -> Printer)
     let connectionType: 'usb' | 'network' = 'usb'
     let printerIp = '192.168.1.127'
     let printerPort = 9100
     let configPaperWidth: 58 | 80 = paperWidth
-    
+
     try {
       const stored = localStorage.getItem('pos_printer_config')
       if (stored) {
@@ -119,80 +202,71 @@ export async function printReceipt(
       console.warn('Could not read printer config, using defaults', e)
     }
 
-    plog(`PATH 1: Android native APK → ${connectionType.toUpperCase()}`)
-    const result = await nativePrintReceipt({ 
-      order, 
-      paymentMethod, 
-      taxRate, 
-      serviceChargeRate, 
-      paperWidth: configPaperWidth, 
+    toast.loading(`Sending to ${connectionType.toUpperCase()} printer...`, { id: 'print-toast' })
+    plog(`PATH 1: Android Native → ${connectionType.toUpperCase()}`)
+
+    const result = await nativePrintReceipt({
+      order,
+      paymentMethod,
+      taxRate,
+      serviceChargeRate,
+      paperWidth: configPaperWidth,
       connectionType,
-      printerIp, 
-      printerPort 
+      printerIp,
+      printerPort
     })
+
     plog('PATH 1 result:', result)
     if (result.success) {
       toast.success('Receipt printed!', { id: 'print-toast' })
     } else {
-      toast.error(`Printer error: ${result.error ?? 'Unknown'}`, { id: 'print-toast' })
+      if (connectionType === 'usb') {
+        toast.error(`USB Print Error: ${result.error ?? 'Check USB connection'}`, { id: 'print-toast' })
+      } else {
+        toast.error(`Network Print Error: ${result.error ?? 'Check network connection'}`, { id: 'print-toast' })
+      }
     }
     return
   }
 
-  // ── Path 2: iPhone PWA / browser → Supabase relay ────────────────────────────
-  const platform = isIOSPWA() ? 'iPhone PWA (standalone)' : 'Browser'
-  plog(`PATH 2: ${platform} → Supabase relay`)
-
-  toast.loading('Sending receipt to kitchen printer...', { id: 'print-toast' })
-
+  // ── PATH 2: Locally-configured device (browser with pos_printer_config set) ──
+  // e.g. a browser-based tablet that has been explicitly configured with a printer IP
   try {
-    // 1. Check heartbeat
-    plog('STEP 1: Checking Android POS heartbeat...')
-    const diag = await getPrintServerDiagnostics()
-    plog('STEP 1 result:', diag)
-
-    if (!diag.online) {
-      plog(`STEP 1 FAILED: POS offline — ${diag.reason}`)
-      toast.error(diag.reason, { id: 'print-toast', duration: 7000 })
-      return
+    const stored = localStorage.getItem('pos_printer_config')
+    if (stored) {
+      const config = JSON.parse(stored)
+      if (config.printerIp && config.connectionType === 'network') {
+        plog('PATH 2: Browser with local network printer config → native attempt')
+        const result = await nativePrintReceipt({
+          order,
+          paymentMethod,
+          taxRate,
+          serviceChargeRate,
+          paperWidth: config.paperWidth ? parseInt(config.paperWidth, 10) as 58 | 80 : paperWidth,
+          connectionType: 'network',
+          printerIp: config.printerIp,
+          printerPort: config.printerPort ? parseInt(config.printerPort, 10) : 9100,
+        })
+        if (result.success) {
+          toast.success('Receipt printed!', { id: 'print-toast' })
+          return
+        }
+        // If it failed, fall through to desktop browser print
+        plog('PATH 2: Local config print failed, falling through:', result.error)
+      }
     }
-    plog('STEP 1 OK: POS is online')
-
-    // 2. Insert print job
-    plog('STEP 2: Creating print_jobs row in Supabase...')
-    const res = await createPrintJob(order, paymentMethod, taxRate, serviceChargeRate, paperWidth)
-    if (res.error || !res.data) {
-      plog('STEP 2 FAILED:', res.error)
-      throw new Error(res.error ?? 'Failed to create print job')
-    }
-    const jobId = res.data.id
-    plog(`STEP 2 OK: Job created with id=${jobId}`)
-
-    toast.loading('Printing...', { id: 'print-toast' })
-    plog(`STEP 3: Waiting for Android worker to process job ${jobId}...`)
-    plog(`STEP 3: Will poll every ${POLL_INTERVAL}ms AND listen via Realtime. Timeout: ${RELAY_TIMEOUT}ms`)
-
-    // 3. Wait for result
-    const result = await waitForJobCompletion(jobId)
-    plog(`STEP 3 result:`, result)
-
-    if (result.success) {
-      toast.success('Receipt printed successfully.', { id: 'print-toast', duration: 4000 })
-    } else {
-      toast.error(result.reason, { id: 'print-toast', duration: 8000 })
-    }
-  } catch (e: any) {
-    plog('FATAL ERROR:', e?.message)
-    console.error('[print-bridge] Relay error:', e)
-    toast.error(`Print error: ${e?.message ?? 'Unknown error'}`, { id: 'print-toast' })
+  } catch (e) {
+    plog('PATH 2: Could not read/use local printer config:', e)
   }
+
+  // ── PATH 3: Desktop browser / Mac / Windows → OS native print dialog ────────
+  // This is the default for any non-Android browser session.
+  plog('PATH 3: Desktop browser → OS print dialog (window.print)')
+  printReceiptBrowser(order, paymentMethod, taxRate, serviceChargeRate)
 }
 
 // ─── Wait for job completion — Realtime + polling fallback ────────────────────
-// Supabase Realtime UPDATE filters are unreliable. We use BOTH:
-//   - Realtime subscription (fast path)
-//   - Direct DB poll every 2s (reliable fallback)
-//   - Heartbeat check every 10s (detect POS offline mid-wait)
+// Kept for backward compatibility (used in iOS PWA relay path if ever re-enabled)
 function waitForJobCompletion(jobId: string): Promise<{ success: boolean; reason: string }> {
   return new Promise((resolve) => {
     const supabase = createClient()
@@ -211,13 +285,11 @@ function waitForJobCompletion(jobId: string): Promise<{ success: boolean; reason
       resolve(result)
     }
 
-    // Hard timeout — cannot wait forever
     const hardTimeout = setTimeout(() => {
       plog(`TIMEOUT: Job ${jobId} not completed within ${RELAY_TIMEOUT}ms`)
       finish({ success: false, reason: 'Timed out — the kitchen printer did not respond. Please try again.' })
     }, RELAY_TIMEOUT)
 
-    // Poll the DB directly every 2 seconds — reliable fallback
     pollTimer = setInterval(async () => {
       try {
         const { data, error } = await supabase
@@ -236,13 +308,11 @@ function waitForJobCompletion(jobId: string): Promise<{ success: boolean; reason
         } else if (data.status === 'failed') {
           finish({ success: false, reason: data.error_message ?? 'Printer error — please try again' })
         }
-        // 'pending' or 'processing' → keep waiting
       } catch (e: any) {
         plog('POLL exception:', e?.message)
       }
     }, POLL_INTERVAL)
 
-    // Also check if POS went offline while we're waiting
     heartbeatTimer = setInterval(async () => {
       const diag = await getPrintServerDiagnostics()
       plog(`HEARTBEAT CHECK while waiting: online=${diag.online}`)
@@ -251,7 +321,6 @@ function waitForJobCompletion(jobId: string): Promise<{ success: boolean; reason
       }
     }, 10_000)
 
-    // Realtime subscription as fast path (may or may not fire depending on RLS/filters)
     plog(`REALTIME: subscribing to print_jobs UPDATE where id=${jobId}`)
     const channel = supabase
       .channel(`print_result_${jobId}`)

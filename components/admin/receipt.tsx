@@ -91,9 +91,162 @@ function buildReceiptLines(order: any, paymentMethod: string, taxRate: number, s
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// buildReceiptHtml — generates a complete, print-ready HTML document.
+// Used by printReceiptBrowser() in print-bridge.ts to trigger window.print()
+// on desktop/laptop devices (Mac, Windows) via the OS native print dialog.
+// ─────────────────────────────────────────────────────────────────────────────
+export function buildReceiptHtml(
+  order: any,
+  paymentMethod: string,
+  taxRate: number,
+  serviceChargeRate: number = 0
+): string {
+  if (!order) return ''
+
+  const fmt = (n: number | string) => Math.round(Number(n) || 0).toLocaleString()
+  const date = new Date(order.created_at || Date.now())
+  const dateStr = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+  const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+  const orderType = (order.order_type || 'dine_in').replace(/_/g, ' ')
+  const subtotal  = Number(order.subtotal || 0)
+  const discount  = Number(order.discountAmount || 0)
+  const tax       = Number(order.tax || 0)
+  const service   = Number(order.serviceCharge || 0)
+  const total     = Number(order.total || 0)
+  const items: any[] = order.items || []
+
+  const tableRow = (label: string, value: string, bold = false, color = '') =>
+    `<tr>
+      <td style="padding:2px 4px;color:#555;font-size:12px;">${label}</td>
+      <td style="padding:2px 4px;text-align:right;${bold ? 'font-weight:bold;' : ''}${color ? `color:${color};` : ''}font-size:12px;">${value}</td>
+    </tr>`
+
+  const itemRows = items.map((item: any) => {
+    const qty   = item.quantity || 1
+    const price = Number(item.price || 0) * qty
+    return `<tr>
+      <td style="padding:3px 4px;font-size:12px;">${qty}× ${item.name || ''}</td>
+      <td style="padding:3px 4px;text-align:right;font-size:12px;">NPR ${fmt(price)}</td>
+    </tr>`
+  }).join('')
+
+  const tableNum = order.restaurant_tables?.table_number
+    ? `<tr>${tableRow('Table', order.restaurant_tables.table_number)}</tr>` : ''
+
+  const discountRow = discount > 0
+    ? tableRow('Discount', `− NPR ${fmt(discount)}`, false, '#16a34a') : ''
+
+  const taxRow = taxRate > 0 && tax > 0
+    ? tableRow(`VAT (${taxRate}%)`, `NPR ${fmt(tax)}`) : ''
+
+  const serviceRow = serviceChargeRate > 0 && service > 0
+    ? tableRow(`Service (${serviceChargeRate}%)`, `NPR ${fmt(service)}`) : ''
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Receipt - ${order.order_number || ''}</title>
+  <style>
+    @page {
+      size: 80mm auto;
+      margin: 4mm 4mm;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 12px;
+      color: #000;
+      background: #fff;
+      width: 72mm;
+    }
+    .center { text-align: center; }
+    .bold   { font-weight: bold; }
+    .lg     { font-size: 14px; }
+    .xl     { font-size: 16px; }
+    .divider-dash  { border-top: 1px dashed #000; margin: 4px 0; }
+    .divider-solid { border-top: 2px solid  #000; margin: 4px 0; }
+    table { width: 100%; border-collapse: collapse; }
+    .total-row td { font-weight: bold; font-size: 14px; padding: 4px 4px; }
+    .footer { text-align: center; margin-top: 8px; font-size: 11px; color: #444; }
+    @media print {
+      body { width: 72mm; }
+      button { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="center">
+    <p class="bold lg">KHUKURI RESTAURANT</p>
+    <p class="bold">&amp; BAR FUN VILLA</p>
+    <p>Hetauda, Makwanpur, Nepal</p>
+    <p>+977-985-5073719</p>
+  </div>
+
+  <div class="divider-dash"></div>
+
+  <table>
+    ${tableRow('Invoice', order.order_number || '-')}
+    ${tableRow('Date', dateStr)}
+    ${tableRow('Time', timeStr)}
+    ${tableRow('Type', orderType.charAt(0).toUpperCase() + orderType.slice(1))}
+    ${tableNum}
+    ${tableRow('Payment', paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1))}
+  </table>
+
+  <div class="divider-dash"></div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="text-align:left;font-size:12px;padding:2px 4px;">Item</th>
+        <th style="text-align:right;font-size:12px;padding:2px 4px;">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${itemRows}
+    </tbody>
+  </table>
+
+  <div class="divider-dash"></div>
+
+  <table>
+    ${tableRow('Subtotal', 'NPR ' + fmt(subtotal))}
+    ${discountRow}
+    ${taxRow}
+    ${serviceRow}
+  </table>
+
+  <div class="divider-solid"></div>
+
+  <table>
+    <tr class="total-row">
+      <td>GRAND TOTAL</td>
+      <td style="text-align:right;">NPR ${fmt(total)}</td>
+    </tr>
+  </table>
+
+  <div class="divider-solid"></div>
+
+  <div class="footer">
+    <p>Thank you for visiting!</p>
+    <p>Please visit us again</p>
+  </div>
+
+  <script>
+    // Auto-print when opened in a popup/iframe
+    window.onload = function() {
+      window.print()
+    }
+  </script>
+</body>
+</html>`
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // printReceiptImageDirectly — DISABLED
-// window.print() / browser print dialogs are never used.
-// All printing goes through Supabase relay → Android POS → ESC/POS printer.
+// window.print() / browser print dialogs are never used for the relay path.
+// All relay printing goes through Supabase relay → Android POS → ESC/POS printer.
 // This function is kept as a no-op so existing call sites don't break.
 // ─────────────────────────────────────────────────────────────────────────────
 export function printReceiptImageDirectly(
