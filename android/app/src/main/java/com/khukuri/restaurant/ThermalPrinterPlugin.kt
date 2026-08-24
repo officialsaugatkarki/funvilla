@@ -269,7 +269,6 @@ class ThermalPrinterPlugin : Plugin() {
                     val result = JSObject()
                     result.put("success", true)
                     call.resolve(result)
-                    call.releaseRetainedArguments()
                 } finally {
                     connection.releaseInterface(printerInterface)
                     connection.close()
@@ -317,7 +316,6 @@ class ThermalPrinterPlugin : Plugin() {
                 val result = JSObject()
                 result.put("success", true)
                 call.resolve(result)
-                call.releaseRetainedArguments()
             } else {
                 resolveError(call, lastError ?: "Unknown printer error")
             }
@@ -342,6 +340,5 @@ class ThermalPrinterPlugin : Plugin() {
         result.put("success", false)
         result.put("error", message)
         call.resolve(result)
-        call.releaseRetainedArguments()
     }
 }
