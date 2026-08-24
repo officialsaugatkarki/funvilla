@@ -164,7 +164,8 @@ export default function POSClient({
           quantity: i.quantity,
           unitPrice: i.price,
           notes: i.notes,
-        }))
+        })),
+        waiterName: selectedWaiter !== 'none' && selectedWaiter !== '' ? selectedWaiter : undefined
       })
       if (result.error) { toast.error(result.error); return }
       setCurrentOrderId(result.data!.id)
@@ -196,7 +197,7 @@ export default function POSClient({
     const paid = parseFloat(amountPaid) || paymentTotal
 
     startTransition(async () => {
-      const result = await processPayment(currentOrderId, paymentMethod, paid)
+      const result = await processPayment(currentOrderId, paymentMethod, paid, isPaidBill)
       if (result.error) { toast.error(result.error); return }
       toast.success('Payment processed!')
       setIsPaymentOpen(false)
@@ -208,15 +209,16 @@ export default function POSClient({
       // Auto-print if on Android with autoPrint enabled
       if (isNativeAndroid()) {
         try {
+          const waiterName = completedOrder?.metadata?.waiter_name || selectedWaiter
           const stored = localStorage.getItem('pos_printer_config')
           if (stored) {
             const config = JSON.parse(stored)
             if (config.autoPrint) {
-              printReceipt(completedOrder, paymentMethod, taxRate, serviceChargeRate)
+              printReceipt(completedOrder, paymentMethod, taxRate, serviceChargeRate, 80, waiterName, isPaidBill)
             }
           } else {
             // Default to auto-print if not configured
-            printReceipt(completedOrder, paymentMethod, taxRate, serviceChargeRate)
+            printReceipt(completedOrder, paymentMethod, taxRate, serviceChargeRate, 80, waiterName, isPaidBill)
           }
         } catch (e) {}
       }
@@ -277,11 +279,11 @@ export default function POSClient({
                           {order.order_type.replace('_', ' ')}
                         </Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                        <Clock className="w-3 h-3" />
-                        {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        {order.restaurant_tables?.table_number && ` • Table ${order.restaurant_tables.table_number}`}
-                        {order.customer_name && ` • ${order.customer_name}`}
+                      <p className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap mt-1">
+                        <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        {order.restaurant_tables?.table_number && <span>• Table {order.restaurant_tables.table_number}</span>}
+                        {order.customer_name && <span>• {order.customer_name}</span>}
+                        {order.metadata?.waiter_name && <span>• Served by: {order.metadata.waiter_name}</span>}
                       </p>
                     </div>
                     <div className="text-right">
@@ -379,6 +381,18 @@ export default function POSClient({
             </SelectContent>
           </Select>
         )}
+
+        <Select value={selectedWaiter} onValueChange={setSelectedWaiter}>
+          <SelectTrigger className="h-9">
+            <SelectValue placeholder="Served By (Waiter)" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">None</SelectItem>
+            {WAITERS.map(w => (
+              <SelectItem key={w} value={w}>{w}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         <Input
           placeholder="Customer name (optional)"
@@ -736,6 +750,36 @@ export default function POSClient({
                   </span>
                 </div>
               </div>
+
+              {/* ── Paid / Unpaid toggle ─────────────────────── */}
+              <div className="space-y-2 border-t pt-3">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  Payment Status
+                </Label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setIsPaidBill(true)}
+                    className={`flex-1 py-2 px-3 rounded-lg border text-sm font-semibold transition-all ${
+                      isPaidBill
+                        ? 'bg-emerald-500 text-white border-emerald-500'
+                        : 'bg-background border-border hover:bg-muted'
+                    }`}
+                  >
+                    ✓ PAID
+                  </button>
+                  <button
+                    onClick={() => setIsPaidBill(false)}
+                    className={`flex-1 py-2 px-3 rounded-lg border text-sm font-semibold transition-all ${
+                      !isPaidBill
+                        ? 'bg-red-500 text-white border-red-500'
+                        : 'bg-background border-border hover:bg-muted'
+                    }`}
+                  >
+                    ✗ UNPAID
+                  </button>
+                </div>
+              </div>
+
             </div>
           </div>
 
@@ -744,7 +788,7 @@ export default function POSClient({
               Cancel
             </Button>
             <Button className="flex-1 sm:flex-none h-11" onClick={handlePayment} disabled={isPending}>
-              {isPending ? 'Processing...' : 'Confirm Payment'}
+              {isPending ? 'Processing...' : (isPaidBill ? 'Confirm Payment' : 'Complete Order (Unpaid)')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -762,55 +806,8 @@ export default function POSClient({
             <div className="h-16 w-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
               <CheckCircle2 className="h-8 w-8" />
             </div>
-            <h2 className="text-xl font-bold">Payment Successful</h2>
+            <h2 className="text-xl font-bold">Order Completed</h2>
             <p className="text-sm text-muted-foreground">Order #{completedOrder?.order_number}</p>
-          </div>
-
-          {/* ── Waiter selector ─────────────────────────── */}
-          <div className="space-y-2 px-1">
-            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Served By (Waiter)</Label>
-            <div className="flex gap-2">
-              {WAITERS.map(w => (
-                <button
-                  key={w}
-                  onClick={() => setSelectedWaiter(prev => prev === w ? '' : w)}
-                  className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-all ${
-                    selectedWaiter === w
-                      ? 'bg-primary text-primary-foreground border-primary'
-                      : 'bg-background border-border hover:bg-muted'
-                  }`}
-                >
-                  {w}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* ── Paid / Unpaid toggle ─────────────────────── */}
-          <div className="space-y-2 px-1">
-            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Payment Status</Label>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setIsPaidBill(true)}
-                className={`flex-1 py-2 px-3 rounded-lg border text-sm font-semibold transition-all ${
-                  isPaidBill
-                    ? 'bg-emerald-500 text-white border-emerald-500'
-                    : 'bg-background border-border hover:bg-muted'
-                }`}
-              >
-                ✓ PAID
-              </button>
-              <button
-                onClick={() => setIsPaidBill(false)}
-                className={`flex-1 py-2 px-3 rounded-lg border text-sm font-semibold transition-all ${
-                  !isPaidBill
-                    ? 'bg-red-500 text-white border-red-500'
-                    : 'bg-background border-border hover:bg-muted'
-                }`}
-              >
-                ✗ UNPAID
-              </button>
-            </div>
           </div>
 
           <DialogFooter className="flex-col sm:flex-row gap-2 mt-2">
@@ -831,7 +828,8 @@ export default function POSClient({
               className="flex-1"
               variant="default"
               onClick={() => {
-                printReceipt(completedOrder, paymentMethod, taxRate, serviceChargeRate, 80, selectedWaiter, isPaidBill)
+                const waiterName = completedOrder?.metadata?.waiter_name || selectedWaiter
+                printReceipt(completedOrder, paymentMethod, taxRate, serviceChargeRate, 80, waiterName, isPaidBill)
               }}
             >
               <Receipt className="mr-2 h-4 w-4" />

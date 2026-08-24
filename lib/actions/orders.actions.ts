@@ -14,6 +14,7 @@ const CreateOrderSchema = z.object({
   customerId: z.string().uuid().nullable().optional(),
   orderType: z.enum(['dine_in', 'takeaway', 'delivery', 'qr']),
   customerName: z.string().max(200).optional(),
+  waiterName: z.string().max(200).optional(),
   customerPhone: z.string().max(20).optional(),
   notes: z.string().max(1000).optional(),
   discountId: z.string().uuid().nullable().optional(),
@@ -73,6 +74,7 @@ export async function createOrder(input: CreateOrderInput): Promise<ApiResponse<
       notes: result.data.notes,
       customer_name: result.data.customerName,
       customer_phone: result.data.customerPhone,
+      metadata: result.data.waiterName ? { waiter_name: result.data.waiterName } : null,
     })
     .select()
     .single()
@@ -232,28 +234,35 @@ export async function updateOrderItemStatus(
 export async function processPayment(
   orderId: string,
   paymentMethod: string,
-  amount: number
+  amount: number,
+  isPaid: boolean = true
 ): Promise<ApiResponse<null>> {
   const user = await requirePermission(PERMISSIONS.POS_ACCESS)
   const supabase = await createClient()
 
-  // Insert payment record
-  const { error: paymentError } = await supabase.from('payments').insert({
-    order_id: orderId,
-    restaurant_id: user.restaurantId,
-    processed_by: user.id,
-    payment_method: paymentMethod,
-    amount,
-    currency: 'NPR',
-    status: 'completed',
-  })
+  if (isPaid) {
+    // Insert payment record
+    const { error: paymentError } = await supabase.from('payments').insert({
+      order_id: orderId,
+      restaurant_id: user.restaurantId,
+      processed_by: user.id,
+      payment_method: paymentMethod,
+      amount,
+      currency: 'NPR',
+      status: 'completed',
+    })
 
-  if (paymentError) return { data: null, error: paymentError.message }
+    if (paymentError) return { data: null, error: paymentError.message }
+  }
 
-  // Mark order as paid and completed
+  // Mark order as completed and set payment status
   const { error: orderError } = await supabase
     .from('orders')
-    .update({ payment_status: 'paid', status: 'completed', completed_at: new Date().toISOString() })
+    .update({ 
+      payment_status: isPaid ? 'paid' : 'unpaid', 
+      status: 'completed', 
+      completed_at: new Date().toISOString() 
+    })
     .eq('id', orderId)
     .eq('restaurant_id', user.restaurantId)
 
@@ -302,8 +311,8 @@ export async function getActiveOrdersForPOS(): Promise<ApiResponse<any[]>> {
     .from('orders')
     .select(`
       id, order_number, order_type, status, payment_status, total, created_at,
-      subtotal, tax_amount, service_charge_amount, discount_amount, customer_name,
-      restaurant_tables(table_number),
+      subtotal, tax_amount, service_charge_amount, discount_amount, customer_name, metadata,
+      restaurant_tables(table_number, section),
       order_items(id, menu_item_name, quantity, unit_price, status)
     `)
     .eq('restaurant_id', user.restaurantId)
