@@ -36,7 +36,7 @@ export default function RecipesClient({
   
   // Calculate total cost
   const totalCost = currentRecipes.reduce((sum, r) => {
-    return sum + (r.quantity * (r.inventory_items?.cost_per_unit || 0))
+    return sum + (r.quantity * (r.inventory?.cost_per_unit || 0))
   }, 0)
 
   async function handleAddIngredient(e: React.FormEvent) {
@@ -191,10 +191,10 @@ export default function RecipesClient({
                     {currentRecipes.length === 0 ? (
                       <tr><td colSpan={4} className="text-center p-8 text-muted-foreground">No ingredients mapped yet.</td></tr>
                     ) : currentRecipes.map(recipe => {
-                      const cost = recipe.quantity * (recipe.inventory_items?.cost_per_unit || 0)
+                      const cost = recipe.quantity * (recipe.inventory?.cost_per_unit || 0)
                       return (
                         <tr key={recipe.id} className="hover:bg-muted/30">
-                          <td className="p-3 font-medium">{recipe.inventory_items?.name}</td>
+                          <td className="p-3 font-medium">{recipe.inventory?.name}</td>
                           <td className="p-3">{recipe.quantity} {recipe.unit}</td>
                           <td className="p-3 text-muted-foreground">NPR {cost.toFixed(2)}</td>
                           <td className="p-3 text-right">

@@ -33,8 +33,9 @@ export async function getInventory(search?: string): Promise<ApiResponse<any[]>>
   const user = await requirePermission(PERMISSIONS.INVENTORY_READ)
   const supabase = await createClient()
 
+  // NOTE: The Supabase table is named 'inventory' (not 'inventory_items')
   let query = supabase
-    .from('inventory_items')
+    .from('inventory')
     .select('*, suppliers(name)')
     .eq('restaurant_id', user.restaurantId)
     .eq('is_active', true)
@@ -63,7 +64,7 @@ export async function createInventoryItem(formData: unknown): Promise<ApiRespons
 
   const supabase = await createClient()
   const { data, error } = await supabase
-    .from('inventory_items')
+    .from('inventory')
     .insert({ ...result.data, restaurant_id: user.restaurantId })
     .select()
     .single()
@@ -80,7 +81,7 @@ export async function updateInventoryItem(id: string, formData: unknown): Promis
 
   const supabase = await createClient()
   const { data, error } = await supabase
-    .from('inventory_items')
+    .from('inventory')
     .update(result.data)
     .eq('id', id)
     .eq('restaurant_id', user.restaurantId)
@@ -123,12 +124,12 @@ export async function adjustInventory(input: z.infer<typeof AdjustmentSchema>): 
   // Graceful fallback if RPC doesn't exist yet
   if (qtyErr) {
     const { data: current } = await supabase
-      .from('inventory_items')
+      .from('inventory')
       .select('quantity')
       .eq('id', result.data.inventoryId)
       .single()
     await supabase
-      .from('inventory_items')
+      .from('inventory')
       .update({ quantity: Math.max(0, (current?.quantity ?? 0) + delta) })
       .eq('id', result.data.inventoryId)
   }
@@ -159,7 +160,7 @@ export async function getLowStockItems(): Promise<ApiResponse<any[]>> {
   const supabase = await createClient()
 
   const { data, error } = await supabase
-    .from('inventory_items')
+    .from('inventory')
     .select('*, suppliers(name)')
     .eq('restaurant_id', user.restaurantId)
     .eq('is_active', true)
@@ -174,9 +175,10 @@ export async function getRecipes(menuItemId?: string): Promise<ApiResponse<any[]
   const user = await requirePermission(PERMISSIONS.INVENTORY_READ)
   const supabase = await createClient()
 
+  // 'inventory' is the actual table name (the join alias key in results will still be 'inventory')
   let query = supabase
     .from('recipes')
-    .select('*, inventory_items(*), menu_items(name)')
+    .select('*, inventory(*), menu_items(name)')
     
   if (menuItemId) {
     query = query.eq('menu_item_id', menuItemId)
@@ -256,11 +258,11 @@ export async function deductInventoryForOrder(orderId: string): Promise<ApiRespo
     }
   }
 
-  // 3. Apply deductions
+  // 3. Apply deductions (using 'inventory' — the correct table name)
   for (const [inventoryId, deductQty] of Array.from(deductions.entries())) {
-    const { data: current } = await supabase.from('inventory_items').select('quantity').eq('id', inventoryId).single()
+    const { data: current } = await supabase.from('inventory').select('quantity').eq('id', inventoryId).single()
     if (current) {
-      await supabase.from('inventory_items').update({
+      await supabase.from('inventory').update({
         quantity: Math.max(0, current.quantity - deductQty)
       }).eq('id', inventoryId)
       

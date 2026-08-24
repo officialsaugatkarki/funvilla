@@ -15,8 +15,8 @@ export default async function RecipesPage() {
     { data: recipes }
   ] = await Promise.all([
     supabase.from('menu_items').select('*').eq('restaurant_id', user.restaurantId).order('name'),
-    supabase.from('inventory_items').select('*').eq('restaurant_id', user.restaurantId).order('name'),
-    supabase.from('recipes').select('*, inventory_items(*), menu_items(*)') // Restaurant ID is implicit via RLS but recipes doesn't have it, it's joined via menu_items
+    supabase.from('inventory').select('*').eq('restaurant_id', user.restaurantId).eq('is_active', true).order('name'),
+    supabase.from('recipes').select('*, inventory(*), menu_items(*)')
   ])
 
   // Filter recipes to only those belonging to this restaurant's menu items
