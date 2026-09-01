@@ -272,6 +272,10 @@ export async function getSwimmingTickets(date?: string): Promise<ApiResponse<any
 export async function createSwimmingTicket(input: {
   adultCount: number
   childCount: number
+  maleCostumeCount?: number
+  femaleCostumeCount?: number
+  maleCostumePrice?: number
+  femaleCostumePrice?: number
   visitorName?: string
   visitorPhone?: string
   visitorAddress?: string
@@ -284,45 +288,62 @@ export async function createSwimmingTicket(input: {
   const ADULT_PRICE = 200
   const CHILD_PRICE = 150
 
-  const adultCount = Math.max(0, input.adultCount || 0)
-  const childCount = Math.max(0, input.childCount || 0)
-  const totalCount = adultCount + childCount
+  const adultCount         = Math.max(0, input.adultCount || 0)
+  const childCount         = Math.max(0, input.childCount || 0)
+  const maleCostumeCount   = Math.max(0, input.maleCostumeCount || 0)
+  const femaleCostumeCount = Math.max(0, input.femaleCostumeCount || 0)
+  const maleCostumePrice   = Math.max(0, input.maleCostumePrice || 0)
+  const femaleCostumePrice = Math.max(0, input.femaleCostumePrice || 0)
 
+  const totalCount = adultCount + childCount
   if (totalCount < 1) return { data: null, error: 'At least 1 visitor required' }
 
-  const price = (adultCount * ADULT_PRICE) + (childCount * CHILD_PRICE)
+  const swimPrice    = (adultCount * ADULT_PRICE) + (childCount * CHILD_PRICE)
+  const costumePrice = (maleCostumeCount * maleCostumePrice) + (femaleCostumeCount * femaleCostumePrice)
+  const totalPrice   = swimPrice + costumePrice
 
-  // Build a human-readable summary for the notes/type field
+  // Build human-readable summary for notes
   const parts: string[] = []
-  if (adultCount > 0) parts.push(`${adultCount} Adult${adultCount > 1 ? 's' : ''}`)
-  if (childCount > 0) parts.push(`${childCount} Child${childCount > 1 ? 'ren' : ''}`)
+  if (adultCount > 0)         parts.push(`${adultCount} Adult${adultCount > 1 ? 's' : ''}`)
+  if (childCount > 0)         parts.push(`${childCount} Child${childCount > 1 ? 'ren' : ''}`)
+  if (maleCostumeCount > 0)   parts.push(`${maleCostumeCount} Male Costume`)
+  if (femaleCostumeCount > 0) parts.push(`${femaleCostumeCount} Female Costume`)
   const summary = parts.join(' + ')
 
-  // ticket_type: 'adult' if only adults, 'child' if only children, 'mixed' otherwise
-  const ticketType = adultCount > 0 && childCount > 0 ? 'adult' : adultCount > 0 ? 'adult' : 'child'
+  const ticketType = adultCount > 0 ? 'adult' : 'child'
 
   const { data, error } = await supabase
     .from('swimming_tickets')
     .insert({
-      restaurant_id: user.restaurantId,
-      ticket_type: ticketType,
-      visitor_name: input.visitorName || null,
-      visitor_phone: input.visitorPhone || null,
+      restaurant_id:  user.restaurantId,
+      ticket_type:    ticketType,
+      visitor_name:   input.visitorName || null,
+      visitor_phone:  input.visitorPhone || null,
       visitor_address: input.visitorAddress || null,
       visitor_gender: input.visitorGender || null,
-      visitor_count: totalCount,
-      price,
+      visitor_count:  totalCount,
+      price:          totalPrice,
       payment_method: input.paymentMethod,
       payment_status: 'paid',
-      valid_date: new Date().toISOString().split('T')[0],
-      check_in_time: new Date().toISOString(),
-      sold_by: user.id,
-      notes: summary,   // e.g. "2 Adults + 2 Children"
+      valid_date:     new Date().toISOString().split('T')[0],
+      check_in_time:  new Date().toISOString(),
+      sold_by:        user.id,
+      notes:          summary,
     })
     .select()
     .single()
 
   if (error) return { data: null, error: error.message }
+
+  // Attach costume info for use by the print bridge
+  const enriched = {
+    ...data,
+    _male_costume_count:   maleCostumeCount,
+    _female_costume_count: femaleCostumeCount,
+    _male_costume_price:   maleCostumePrice,
+    _female_costume_price: femaleCostumePrice,
+  }
+
   revalidatePath('/admin/swimming')
-  return { data, error: null }
+  return { data: enriched, error: null }
 }

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { toast } from 'sonner'
-import { Droplets, Plus, Minus, Search, Ticket, Printer } from 'lucide-react'
+import { Droplets, Plus, Minus, Search, Ticket, Printer, Shirt } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -27,6 +27,12 @@ export default function SwimmingClient({ tickets }: { tickets: any[] }) {
   const [adultCount, setAdultCount] = useState(1)
   const [childCount, setChildCount] = useState(0)
 
+  // Costume counts + custom prices
+  const [maleCostumeCount, setMaleCostumeCount] = useState(0)
+  const [femaleCostumeCount, setFemaleCostumeCount] = useState(0)
+  const [maleCostumePrice, setMaleCostumePrice] = useState(100)
+  const [femaleCostumePrice, setFemaleCostumePrice] = useState(100)
+
   // Visitor info
   const [visitorName, setVisitorName] = useState('')
   const [visitorPhone, setVisitorPhone] = useState('')
@@ -34,7 +40,8 @@ export default function SwimmingClient({ tickets }: { tickets: any[] }) {
   const [visitorGender, setVisitorGender] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('cash')
 
-  const totalPrice = (adultCount * ADULT_PRICE) + (childCount * CHILD_PRICE)
+  const costumeTotal = (maleCostumeCount * maleCostumePrice) + (femaleCostumeCount * femaleCostumePrice)
+  const totalPrice = (adultCount * ADULT_PRICE) + (childCount * CHILD_PRICE) + costumeTotal
   const totalVisitors = adultCount + childCount
 
   const filtered = tickets.filter(t =>
@@ -48,6 +55,10 @@ export default function SwimmingClient({ tickets }: { tickets: any[] }) {
   function resetForm() {
     setAdultCount(1)
     setChildCount(0)
+    setMaleCostumeCount(0)
+    setFemaleCostumeCount(0)
+    setMaleCostumePrice(100)
+    setFemaleCostumePrice(100)
     setVisitorName('')
     setVisitorPhone('')
     setVisitorAddress('')
@@ -65,6 +76,10 @@ export default function SwimmingClient({ tickets }: { tickets: any[] }) {
       const result = await createSwimmingTicket({
         adultCount,
         childCount,
+        maleCostumeCount,
+        femaleCostumeCount,
+        maleCostumePrice,
+        femaleCostumePrice,
         visitorName: visitorName || undefined,
         visitorPhone: visitorPhone || undefined,
         visitorAddress: visitorAddress || undefined,
@@ -96,26 +111,29 @@ export default function SwimmingClient({ tickets }: { tickets: any[] }) {
 
   function CounterRow({
     label,
-    price,
+    sublabel,
     count,
     onDec,
     onInc,
     color,
+    priceInput,
   }: {
     label: string
-    price: number
+    sublabel: string
     count: number
     onDec: () => void
     onInc: () => void
     color: string
+    priceInput?: React.ReactNode
   }) {
     return (
       <div className="flex items-center justify-between py-3 border rounded-xl px-4 bg-muted/30">
-        <div>
+        <div className="flex-1">
           <p className="font-semibold text-sm">{label}</p>
-          <p className={`text-xs font-medium ${color}`}>Rs {price} per person</p>
+          <p className={`text-xs font-medium ${color}`}>{sublabel}</p>
+          {priceInput}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 ml-4">
           <button
             type="button"
             onClick={onDec}
@@ -133,8 +151,8 @@ export default function SwimmingClient({ tickets }: { tickets: any[] }) {
             <Plus className="h-3 w-3" />
           </button>
         </div>
-        <p className="w-16 text-right font-bold text-sm">
-          {count > 0 ? `Rs ${count * price}` : '—'}
+        <p className="w-16 text-right font-bold text-sm ml-3">
+          {count > 0 ? `Rs ${count * (label.startsWith('Male') ? maleCostumePrice : label.startsWith('Female') ? femaleCostumePrice : (label === 'Adult' ? ADULT_PRICE : CHILD_PRICE))}` : '—'}
         </p>
       </div>
     )
@@ -156,29 +174,127 @@ export default function SwimmingClient({ tickets }: { tickets: any[] }) {
           <DialogTrigger asChild>
             <Button><Plus className="mr-2 h-4 w-4" /> Issue Ticket</Button>
           </DialogTrigger>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>Issue New Swimming Ticket</DialogTitle></DialogHeader>
             <div className="space-y-4">
 
               {/* Visitors */}
               <div className="space-y-2">
                 <Label className="text-sm font-semibold">Visitors</Label>
-                <CounterRow
-                  label="Adult"
-                  price={ADULT_PRICE}
-                  count={adultCount}
-                  onDec={() => setAdultCount(Math.max(0, adultCount - 1))}
-                  onInc={() => setAdultCount(adultCount + 1)}
-                  color="text-blue-600"
-                />
-                <CounterRow
-                  label="Child"
-                  price={CHILD_PRICE}
-                  count={childCount}
-                  onDec={() => setChildCount(Math.max(0, childCount - 1))}
-                  onInc={() => setChildCount(childCount + 1)}
-                  color="text-green-600"
-                />
+                {/* Adult */}
+                <div className="flex items-center justify-between py-3 border rounded-xl px-4 bg-muted/30">
+                  <div>
+                    <p className="font-semibold text-sm">Adult</p>
+                    <p className="text-xs font-medium text-blue-600">Rs {ADULT_PRICE} per person</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button type="button" onClick={() => setAdultCount(Math.max(0, adultCount - 1))}
+                      disabled={adultCount <= 0}
+                      className="h-8 w-8 rounded-full border border-border flex items-center justify-center hover:bg-muted disabled:opacity-30 transition-all">
+                      <Minus className="h-3 w-3" />
+                    </button>
+                    <span className="text-lg font-bold w-6 text-center">{adultCount}</span>
+                    <button type="button" onClick={() => setAdultCount(adultCount + 1)}
+                      className="h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 transition-all">
+                      <Plus className="h-3 w-3" />
+                    </button>
+                  </div>
+                  <p className="w-16 text-right font-bold text-sm">{adultCount > 0 ? `Rs ${adultCount * ADULT_PRICE}` : '—'}</p>
+                </div>
+
+                {/* Child */}
+                <div className="flex items-center justify-between py-3 border rounded-xl px-4 bg-muted/30">
+                  <div>
+                    <p className="font-semibold text-sm">Child</p>
+                    <p className="text-xs font-medium text-green-600">Rs {CHILD_PRICE} per person</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button type="button" onClick={() => setChildCount(Math.max(0, childCount - 1))}
+                      disabled={childCount <= 0}
+                      className="h-8 w-8 rounded-full border border-border flex items-center justify-center hover:bg-muted disabled:opacity-30 transition-all">
+                      <Minus className="h-3 w-3" />
+                    </button>
+                    <span className="text-lg font-bold w-6 text-center">{childCount}</span>
+                    <button type="button" onClick={() => setChildCount(childCount + 1)}
+                      className="h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 transition-all">
+                      <Plus className="h-3 w-3" />
+                    </button>
+                  </div>
+                  <p className="w-16 text-right font-bold text-sm">{childCount > 0 ? `Rs ${childCount * CHILD_PRICE}` : '—'}</p>
+                </div>
+              </div>
+
+              {/* Costume section */}
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold flex items-center gap-2">
+                  <Shirt className="h-4 w-4 text-purple-500" /> Costume (Optional)
+                </Label>
+
+                {/* Male Costume */}
+                <div className="border rounded-xl px-4 py-3 bg-muted/20 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className="font-semibold text-sm">Male Costume</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-muted-foreground">Rs</span>
+                        <Input
+                          type="number"
+                          value={maleCostumePrice}
+                          onChange={e => setMaleCostumePrice(Math.max(0, parseInt(e.target.value) || 0))}
+                          className="h-6 w-20 text-xs px-2"
+                          min={0}
+                        />
+                        <span className="text-xs text-muted-foreground">each</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button type="button" onClick={() => setMaleCostumeCount(Math.max(0, maleCostumeCount - 1))}
+                        disabled={maleCostumeCount <= 0}
+                        className="h-8 w-8 rounded-full border border-border flex items-center justify-center hover:bg-muted disabled:opacity-30 transition-all">
+                        <Minus className="h-3 w-3" />
+                      </button>
+                      <span className="text-lg font-bold w-6 text-center">{maleCostumeCount}</span>
+                      <button type="button" onClick={() => setMaleCostumeCount(maleCostumeCount + 1)}
+                        className="h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 transition-all">
+                        <Plus className="h-3 w-3" />
+                      </button>
+                    </div>
+                    <p className="w-16 text-right font-bold text-sm">{maleCostumeCount > 0 ? `Rs ${maleCostumeCount * maleCostumePrice}` : '—'}</p>
+                  </div>
+                </div>
+
+                {/* Female Costume */}
+                <div className="border rounded-xl px-4 py-3 bg-muted/20 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className="font-semibold text-sm">Female Costume</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-muted-foreground">Rs</span>
+                        <Input
+                          type="number"
+                          value={femaleCostumePrice}
+                          onChange={e => setFemaleCostumePrice(Math.max(0, parseInt(e.target.value) || 0))}
+                          className="h-6 w-20 text-xs px-2"
+                          min={0}
+                        />
+                        <span className="text-xs text-muted-foreground">each</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button type="button" onClick={() => setFemaleCostumeCount(Math.max(0, femaleCostumeCount - 1))}
+                        disabled={femaleCostumeCount <= 0}
+                        className="h-8 w-8 rounded-full border border-border flex items-center justify-center hover:bg-muted disabled:opacity-30 transition-all">
+                        <Minus className="h-3 w-3" />
+                      </button>
+                      <span className="text-lg font-bold w-6 text-center">{femaleCostumeCount}</span>
+                      <button type="button" onClick={() => setFemaleCostumeCount(femaleCostumeCount + 1)}
+                        className="h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 transition-all">
+                        <Plus className="h-3 w-3" />
+                      </button>
+                    </div>
+                    <p className="w-16 text-right font-bold text-sm">{femaleCostumeCount > 0 ? `Rs ${femaleCostumeCount * femaleCostumePrice}` : '—'}</p>
+                  </div>
+                </div>
               </div>
 
               {/* Live price summary */}
@@ -194,6 +310,18 @@ export default function SwimmingClient({ tickets }: { tickets: any[] }) {
                     <div className="flex justify-between text-sm text-muted-foreground">
                       <span>{childCount} Child{childCount > 1 ? 'ren' : ''} × Rs {CHILD_PRICE}</span>
                       <span>Rs {childCount * CHILD_PRICE}</span>
+                    </div>
+                  )}
+                  {maleCostumeCount > 0 && (
+                    <div className="flex justify-between text-sm text-muted-foreground">
+                      <span>{maleCostumeCount} Male Costume × Rs {maleCostumePrice}</span>
+                      <span>Rs {maleCostumeCount * maleCostumePrice}</span>
+                    </div>
+                  )}
+                  {femaleCostumeCount > 0 && (
+                    <div className="flex justify-between text-sm text-muted-foreground">
+                      <span>{femaleCostumeCount} Female Costume × Rs {femaleCostumePrice}</span>
+                      <span>Rs {femaleCostumeCount * femaleCostumePrice}</span>
                     </div>
                   )}
                   <Separator className="my-1" />
@@ -326,4 +454,3 @@ export default function SwimmingClient({ tickets }: { tickets: any[] }) {
     </div>
   )
 }
-

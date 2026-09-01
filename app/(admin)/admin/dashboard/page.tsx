@@ -1,21 +1,28 @@
 import { requireAuth } from '@/lib/rbac/guards'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Utensils, Users, ShoppingCart, DollarSign } from 'lucide-react'
-import { getDashboardMetrics, getRevenueReport } from '@/lib/actions/admin.actions'
-import { getSettings } from '@/lib/actions/admin.actions'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Utensils, Users, ShoppingCart, DollarSign, Droplets } from 'lucide-react'
+import { getDashboardMetrics, getSettings } from '@/lib/actions/admin.actions'
 import { Badge } from '@/components/ui/badge'
+import { createClient } from '@/lib/supabase/server'
 
 export default async function DashboardPage() {
   const user = await requireAuth()
   
-  // Fetch real data
   const { data: metrics } = await getDashboardMetrics(user.restaurantId)
   const { data: settings } = await getSettings()
-  
-  // Hardcoded chart defaults just for UI representation,
-  // since Recharts cannot be rendered in Server Component directly
-  // we would need a client component for charts. Let's keep it simple for the overview.
   const currency = settings?.currency_symbol || 'NPR'
+
+  // Fetch today's swimming stats
+  const supabase = await createClient()
+  const today = new Date().toISOString().split('T')[0]
+  const { data: swimmingTickets } = await supabase
+    .from('swimming_tickets')
+    .select('price')
+    .eq('restaurant_id', user.restaurantId)
+    .eq('valid_date', today)
+
+  const swimmingCount   = swimmingTickets?.length ?? 0
+  const swimmingRevenue = swimmingTickets?.reduce((sum, t) => sum + (t.price || 0), 0) ?? 0
 
   return (
     <div className="space-y-6">
@@ -59,7 +66,7 @@ export default async function DashboardPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Staff online</CardTitle>
+            <CardTitle className="text-sm font-medium">Staff Online</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -68,12 +75,35 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       </div>
-      
+
+      {/* Swimming stats row */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card className="border-blue-200 bg-blue-50/50 dark:bg-blue-950/20">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-blue-700 dark:text-blue-400">Swimming Tickets Today</CardTitle>
+            <Droplets className="h-4 w-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">{swimmingCount}</div>
+            <p className="text-xs text-blue-600/70 dark:text-blue-400/70">tickets issued today</p>
+          </CardContent>
+        </Card>
+        <Card className="border-blue-200 bg-blue-50/50 dark:bg-blue-950/20">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-blue-700 dark:text-blue-400">Swimming Revenue Today</CardTitle>
+            <Droplets className="h-4 w-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">{currency} {swimmingRevenue.toLocaleString()}</div>
+            <p className="text-xs text-blue-600/70 dark:text-blue-400/70">from swimming tickets</p>
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
         <Card className="col-span-4">
           <CardHeader>
             <CardTitle>System Overview</CardTitle>
-            <CardDescription>Your business is currently operating normally.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
              <div className="flex items-center gap-4">
@@ -90,7 +120,7 @@ export default async function DashboardPage() {
             <CardTitle>Quick Actions</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-             <p className="text-sm text-muted-foreground">Navigate using the sidebar to access POS, Kitchen Display, and other modules.</p>
+             <p className="text-sm text-muted-foreground">Navigate using the sidebar to access POS, Swimming, Rooms and other modules.</p>
           </CardContent>
         </Card>
       </div>

@@ -487,6 +487,15 @@ export async function printSwimmingTicket(ticket: SwimmingTicketData): Promise<v
     if (ticket.visitor_address) visitorLines.push({ name: `Address : ${ticket.visitor_address}`, quantity: 1, price: 0 })
     if (ticket.visitor_gender)  visitorLines.push({ name: `Gender  : ${cap(ticket.visitor_gender)}`, quantity: 1, price: 0 })
 
+    // Costume lines (with real prices)
+    const costumeLines: { name: string; quantity: number; price: number }[] = []
+    const mc  = (ticket as any)._male_costume_count   || 0
+    const fc  = (ticket as any)._female_costume_count || 0
+    const mcp = (ticket as any)._male_costume_price   || 0
+    const fcp = (ticket as any)._female_costume_price || 0
+    if (mc > 0) costumeLines.push({ name: 'Male Costume',   quantity: mc, price: mcp })
+    if (fc > 0) costumeLines.push({ name: 'Female Costume', quantity: fc, price: fcp })
+
     const fakeOrder = {
       order_number: ticket.ticket_number || ticket.id.split('-')[0].toUpperCase(),
       created_at:   ticket.check_in_time || ticket.created_at || new Date().toISOString(),
@@ -494,7 +503,9 @@ export async function printSwimmingTicket(ticket: SwimmingTicketData): Promise<v
       subtotal:     ticket.price,
       total:        ticket.price,
       items: [
-        { name: label, quantity: 1, price: ticket.price },
+        { name: label, quantity: 1, price: ticket.price - (mc * mcp) - (fc * fcp) },
+        ...(costumeLines.length > 0 ? [{ name: '- - - Costume - - -', quantity: 1, price: 0 }] : []),
+        ...costumeLines,
         ...(visitorLines.length > 0 ? [{ name: '- - - Visitor Info - - -', quantity: 1, price: 0 }] : []),
         ...visitorLines,
       ],

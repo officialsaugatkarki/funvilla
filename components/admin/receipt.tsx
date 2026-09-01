@@ -72,8 +72,10 @@ function buildReceiptLines(order: any, paymentMethod: string, taxRate: number, s
     divider('-'),
     ...items.map((item: any) => {
       const name  = `${item.quantity}x ${item.name}`
-      const price = fmt(Number(item.price) * Number(item.quantity))
-      return itemRow(name, price)
+      const total = Number(item.price) * Number(item.quantity)
+      // Zero-price: info line — show without price column
+      if (total === 0) return itemRow(item.name, '')
+      return itemRow(name, fmt(total))
     }),
     divider('-'),
     row('Subtotal', 'NPR ' + fmt(subtotal)),
@@ -126,6 +128,12 @@ export function buildReceiptHtml(
   const itemRows = items.map((item: any) => {
     const qty   = item.quantity || 1
     const price = Number(item.price || 0) * qty
+    // Zero-price items are info lines (visitor info, separators) — render full-width without price
+    if (price === 0) {
+      return `<tr>
+        <td colspan="2" style="padding:3px 4px;font-size:12px;color:#444;">${qty > 1 ? qty + '× ' : ''}${item.name || ''}</td>
+      </tr>`
+    }
     return `<tr>
       <td style="padding:3px 4px;font-size:12px;">${qty}× ${item.name || ''}</td>
       <td style="padding:3px 4px;text-align:right;font-size:12px;">NPR ${fmt(price)}</td>
