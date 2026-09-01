@@ -197,6 +197,9 @@ export async function getPoolTickets(date?: string): Promise<ApiResponse<any[]>>
 export async function createPoolTicket(input: {
   ticketType: string
   visitorName?: string
+  visitorPhone?: string
+  visitorAddress?: string
+  visitorGender?: string
   visitorCount: number
   paymentMethod: string
 }): Promise<ApiResponse<any>> {
@@ -210,8 +213,8 @@ export async function createPoolTicket(input: {
     .single()
 
   const priceMap: Record<string, number> = {
-    adult: settings?.pool_adult_price ?? 200,
-    child: settings?.pool_child_price ?? 100,
+    adult: 200, // Hardcoded for Swimming as requested (adult: 200)
+    child: 150, // Hardcoded for Swimming as requested (kid: 150)
     family: settings?.pool_family_price ?? 500,
     member: 0,
     staff: 0,
@@ -225,6 +228,9 @@ export async function createPoolTicket(input: {
       restaurant_id: user.restaurantId,
       ticket_type: input.ticketType,
       visitor_name: input.visitorName || null,
+      visitor_phone: input.visitorPhone || null,
+      visitor_address: input.visitorAddress || null,
+      visitor_gender: input.visitorGender || null,
       visitor_count: input.visitorCount,
       price,
       payment_method: input.paymentMethod,
@@ -238,5 +244,80 @@ export async function createPoolTicket(input: {
 
   if (error) return { data: null, error: error.message }
   revalidatePath('/admin/pool')
+  return { data, error: null }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SWIMMING
+// ─────────────────────────────────────────────────────────────────────────────
+export async function getSwimmingTickets(date?: string): Promise<ApiResponse<any[]>> {
+  const user = await requirePermission(PERMISSIONS.SWIMMING_ACCESS)
+  const supabase = await createClient()
+
+  let query = supabase
+    .from('swimming_tickets')
+    .select('*')
+    .eq('restaurant_id', user.restaurantId)
+    .order('created_at', { ascending: false })
+
+  if (date) query = query.eq('valid_date', date)
+
+  const { data, error } = await query
+  if (error) return { data: null, error: error.message }
+  return { data, error: null }
+}
+
+export async function createSwimmingTicket(input: {
+  ticketType: string
+  visitorName?: string
+  visitorPhone?: string
+  visitorAddress?: string
+  visitorGender?: string
+  visitorCount: number
+  paymentMethod: string
+}): Promise<ApiResponse<any>> {
+  const user = await requirePermission(PERMISSIONS.SWIMMING_TICKETS)
+  const supabase = await createClient()
+
+  const { data: settings } = await supabase
+    .from('settings')
+    .select('pool_adult_price, pool_child_price, pool_family_price')
+    .eq('restaurant_id', user.restaurantId)
+    .single()
+
+  // Reusing pool prices for swimming for now, or you can add swimming_adult_price in settings
+  const priceMap: Record<string, number> = {
+    adult: 200, // Hardcoded for Swimming as requested (adult: 200)
+    child: 150, // Hardcoded for Swimming as requested (kid: 150)
+    family: settings?.pool_family_price ?? 500,
+    member: 0,
+    staff: 0,
+  }
+
+  const price = (priceMap[input.ticketType] ?? 200) * input.visitorCount
+
+  const { data, error } = await supabase
+    .from('swimming_tickets')
+    .insert({
+      restaurant_id: user.restaurantId,
+      ticket_type: input.ticketType,
+      visitor_name: input.visitorName || null,
+      visitor_phone: input.visitorPhone || null,
+      visitor_address: input.visitorAddress || null,
+      visitor_gender: input.visitorGender || null,
+      visitor_count: input.visitorCount,
+      price,
+      payment_method: input.paymentMethod,
+      payment_status: 'paid',
+      valid_date: new Date().toISOString().split('T')[0],
+      check_in_time: new Date().toISOString(),
+      sold_by: user.id,
+    })
+    .select()
+    .single()
+
+  if (error) return { data: null, error: error.message }
+  revalidatePath('/admin/swimming')
   return { data, error: null }
 }

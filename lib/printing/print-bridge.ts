@@ -19,6 +19,8 @@ import { isNativeAndroid, nativePrintReceipt, isPOSWorkerMode } from './thermal-
 import { createPrintJob } from '@/lib/actions/print.actions'
 import { createClient } from '@/lib/supabase/client'
 import { buildReceiptHtml } from '@/components/admin/receipt'
+import { buildPoolTicketHtml, buildPoolTicketTextLines, type PoolTicketData } from './pool-ticket'
+import { buildSwimmingTicketHtml, buildSwimmingTicketTextLines, type SwimmingTicketData } from './swimming-ticket'
 
 const RELAY_TIMEOUT   = 45_000   // 45s hard timeout
 const POLL_INTERVAL   = 2_000    // Poll every 2s as fallback (Realtime can miss events)
@@ -270,18 +272,6 @@ export async function printReceipt(
   // ── PATH 3: Desktop browser / Mac / Windows → OS native print dialog ────────
   plog('PATH 3: Desktop browser → OS print dialog (window.print)')
   printReceiptBrowser(order, paymentMethod, taxRate, serviceChargeRate, paperWidth, waiter, isPaid)
-}op browser print
-        plog('PATH 2: Local config print failed, falling through:', result.error)
-      }
-    }
-  } catch (e) {
-    plog('PATH 2: Could not read/use local printer config:', e)
-  }
-
-  // ── PATH 3: Desktop browser / Mac / Windows → OS native print dialog ────────
-  // This is the default for any non-Android browser session.
-  plog('PATH 3: Desktop browser → OS print dialog (window.print)')
-  printReceiptBrowser(order, paymentMethod, taxRate, serviceChargeRate)
 }
 
 // ─── Wait for job completion — Realtime + polling fallback ────────────────────
@@ -358,6 +348,196 @@ function waitForJobCompletion(jobId: string): Promise<{ success: boolean; reason
       )
       .subscribe()
   })
+}
+
+// ─── Pool Ticket Printing ─────────────────────────────────────────────────────
+
+/**
+ * Prints a swimming pool ticket.
+ * - Android native: sends ESC/POS-compatible data via nativePrintReceipt
+ * - Desktop browser: opens a popup with the ticket HTML and calls window.print()
+ */
+export async function printPoolTicket(ticket: PoolTicketData): Promise<void> {
+  if (!ticket) { toast.error('No ticket data to print.'); return }
+
+  // ── Android Native ─────────────────────────────────────────────────────────
+  if (isNativeAndroid()) {
+    let connectionType: 'usb' | 'network' = 'network'
+    let printerIp   = '192.168.1.127'
+    let printerPort = 9100
+    let paperWidth: 58 | 80 = 80
+
+    try {
+      const stored = localStorage.getItem('pos_printer_config')
+      if (stored) {
+        const cfg = JSON.parse(stored)
+        if (cfg.connectionType) connectionType = cfg.connectionType
+        if (cfg.printerIp)      printerIp      = cfg.printerIp
+        if (cfg.printerPort)    printerPort    = parseInt(cfg.printerPort, 10)
+        if (cfg.paperWidth)     paperWidth     = parseInt(cfg.paperWidth, 10) as 58 | 80
+      }
+    } catch (e) {
+      console.warn('Could not read printer config, using defaults', e)
+    }
+
+    toast.loading('Printing pool ticket...', { id: 'pool-print-toast' })
+
+    // Adapt the pool ticket into the receipt order shape the native plugin expects.
+    // We re-use the nativePrintReceipt path; the plugin reads `order.items` to build
+    // ESC/POS lines, so we supply the pool ticket as a single line item.
+    const fakeOrder = {
+      order_number: ticket.ticket_number || ticket.id.split('-')[0].toUpperCase(),
+      created_at:   ticket.check_in_time || ticket.created_at || new Date().toISOString(),
+      order_type:   'pool_ticket',
+      subtotal:     ticket.price,
+      total:        ticket.price,
+      items: [{
+        name:     `${ticket.notes || ticket.ticket_type} Ticket`,
+        quantity: ticket.visitor_count,
+        price:    ticket.price / (ticket.visitor_count || 1),
+      }],
+      _pool_ticket: ticket,   // pass full ticket data for custom formatting
+    }
+
+    const result = await nativePrintReceipt({
+      order:        fakeOrder,
+      paymentMethod: ticket.payment_method,
+      taxRate:       0,
+      serviceChargeRate: 0,
+      paperWidth,
+      connectionType,
+      printerIp,
+      printerPort,
+      isPaid: true,
+    })
+
+    if (result.success) {
+      toast.success('Pool ticket printed!', { id: 'pool-print-toast' })
+    } else {
+      toast.error(`Print error: ${result.error ?? 'Check printer connection'}`, { id: 'pool-print-toast' })
+    }
+    return
+  }
+
+  // ── Desktop browser / fallback ─────────────────────────────────────────────
+  plog('POOL TICKET: Desktop browser → window.print()')
+  try {
+    const html = buildPoolTicketHtml(ticket)
+    const popup = window.open('', '_blank', 'width=400,height=600,scrollbars=yes,resizable=yes')
+    if (!popup) {
+      // Popup blocked — use iframe fallback
+      const iframe = document.createElement('iframe')
+      iframe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;border:none;opacity:0;pointer-events:none;'
+      document.body.appendChild(iframe)
+      const doc = iframe.contentWindow?.document
+      if (doc) {
+        doc.open(); doc.write(html); doc.close()
+        iframe.onload = () => {
+          iframe.contentWindow?.print()
+          toast.success('Print dialog opened!', { duration: 3000 })
+          setTimeout(() => iframe.remove(), 5000)
+        }
+      }
+      return
+    }
+    popup.document.open()
+    popup.document.write(html)
+    popup.document.close()
+    popup.addEventListener('afterprint', () => popup.close())
+    toast.success('Print dialog opened!', { duration: 3000 })
+  } catch (e: any) {
+    toast.error(`Print error: ${e?.message ?? 'Could not open print dialog'}`)
+  }
+}
+
+
+// ─── Swimming Ticket Printing ──────────────────────────────────────────────────
+
+export async function printSwimmingTicket(ticket: SwimmingTicketData): Promise<void> {
+  if (!ticket) { toast.error('No ticket data to print.'); return }
+
+  if (isNativeAndroid()) {
+    let connectionType: 'usb' | 'network' = 'network'
+    let printerIp   = '192.168.1.127'
+    let printerPort = 9100
+    let paperWidth: 58 | 80 = 80
+
+    try {
+      const stored = localStorage.getItem('pos_printer_config')
+      if (stored) {
+        const cfg = JSON.parse(stored)
+        if (cfg.connectionType) connectionType = cfg.connectionType
+        if (cfg.printerIp)      printerIp      = cfg.printerIp
+        if (cfg.printerPort)    printerPort    = parseInt(cfg.printerPort, 10)
+        if (cfg.paperWidth)     paperWidth     = parseInt(cfg.paperWidth, 10) as 58 | 80
+      }
+    } catch (e) {
+      console.warn('Could not read printer config, using defaults', e)
+    }
+
+    toast.loading('Printing swimming ticket...', { id: 'swim-print-toast' })
+
+    const fakeOrder = {
+      order_number: ticket.ticket_number || ticket.id.split('-')[0].toUpperCase(),
+      created_at:   ticket.check_in_time || ticket.created_at || new Date().toISOString(),
+      order_type:   'swimming_ticket',
+      subtotal:     ticket.price,
+      total:        ticket.price,
+      items: [{
+        name:     `${ticket.notes || ticket.ticket_type} Ticket`,
+        quantity: ticket.visitor_count,
+        price:    ticket.price / (ticket.visitor_count || 1),
+      }],
+      _swimming_ticket: ticket,
+    }
+
+    const result = await nativePrintReceipt({
+      order:        fakeOrder,
+      paymentMethod: ticket.payment_method,
+      taxRate:       0,
+      serviceChargeRate: 0,
+      paperWidth,
+      connectionType,
+      printerIp,
+      printerPort,
+      isPaid: true,
+    })
+
+    if (result.success) {
+      toast.success('Swimming ticket printed!', { id: 'swim-print-toast' })
+    } else {
+      toast.error(`Print error: ${result.error ?? 'Check printer connection'}`, { id: 'swim-print-toast' })
+    }
+    return
+  }
+
+  plog('SWIMMING TICKET: Desktop browser → window.print()')
+  try {
+    const html = buildSwimmingTicketHtml(ticket)
+    const popup = window.open('', '_blank', 'width=400,height=600,scrollbars=yes,resizable=yes')
+    if (!popup) {
+      const iframe = document.createElement('iframe')
+      iframe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;border:none;opacity:0;pointer-events:none;'
+      document.body.appendChild(iframe)
+      const doc = iframe.contentWindow?.document
+      if (doc) {
+        doc.open(); doc.write(html); doc.close()
+        iframe.onload = () => {
+          iframe.contentWindow?.print()
+          toast.success('Print dialog opened!', { duration: 3000 })
+          setTimeout(() => iframe.remove(), 5000)
+        }
+      }
+      return
+    }
+    popup.document.open()
+    popup.document.write(html)
+    popup.document.close()
+    popup.addEventListener('afterprint', () => popup.close())
+    toast.success('Print dialog opened!', { duration: 3000 })
+  } catch (e: any) {
+    toast.error(`Print error: ${e?.message ?? 'Could not open print dialog'}`)
+  }
 }
 
 export { isNativeAndroid, isPOSWorkerMode }

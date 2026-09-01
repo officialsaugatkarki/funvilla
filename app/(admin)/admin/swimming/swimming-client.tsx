@@ -2,18 +2,18 @@
 
 import { useState, useTransition } from 'react'
 import { toast } from 'sonner'
-import { Waves, Plus, Search, Ticket, Printer } from 'lucide-react'
+import { Droplets, Plus, Search, Ticket, Printer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import { createPoolTicket } from '@/lib/actions/bookings.actions'
-import { printPoolTicket } from '@/lib/printing/print-bridge'
+import { createSwimmingTicket } from '@/lib/actions/bookings.actions'
+import { printSwimmingTicket } from '@/lib/printing/print-bridge'
 import { format } from 'date-fns'
 
-export default function PoolClient({ tickets }: { tickets: any[] }) {
+export default function SwimmingClient({ tickets }: { tickets: any[] }) {
   const [search, setSearch] = useState('')
   const [isOpen, setIsOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -39,7 +39,7 @@ export default function PoolClient({ tickets }: { tickets: any[] }) {
     }
 
     startTransition(async () => {
-      const result = await createPoolTicket(payload)
+      const result = await createSwimmingTicket(payload)
       if (result.error) {
         toast.error(result.error)
       } else {
@@ -47,7 +47,7 @@ export default function PoolClient({ tickets }: { tickets: any[] }) {
         setIsOpen(false)
         // Auto-print the ticket
         if (result.data) {
-          await printPoolTicket(result.data)
+          await printSwimmingTicket(result.data)
         }
       }
     })
@@ -56,7 +56,7 @@ export default function PoolClient({ tickets }: { tickets: any[] }) {
   async function handleReprint(ticket: any) {
     setIsPrinting(ticket.id)
     try {
-      await printPoolTicket(ticket)
+      await printSwimmingTicket(ticket)
     } finally {
       setIsPrinting(null)
     }
@@ -67,7 +67,7 @@ export default function PoolClient({ tickets }: { tickets: any[] }) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-            <Waves className="h-8 w-8 text-blue-500" /> Pool Management
+            <Droplets className="h-8 w-8 text-blue-500" /> Swimming Tickets
           </h1>
           <p className="text-muted-foreground">
             {tickets.filter(t => t.valid_date === new Date().toISOString().split('T')[0]).length} tickets issued today
@@ -79,7 +79,7 @@ export default function PoolClient({ tickets }: { tickets: any[] }) {
             <Button><Plus className="mr-2 h-4 w-4" /> Issue Ticket</Button>
           </DialogTrigger>
           <DialogContent className="max-w-md">
-            <DialogHeader><DialogTitle>Issue New Pool Ticket</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>Issue New Swimming Ticket</DialogTitle></DialogHeader>
             <form action={handleCreateTicket} className="space-y-4">
 
               {/* Ticket Type */}
