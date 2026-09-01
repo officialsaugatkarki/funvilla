@@ -268,51 +268,56 @@ export async function getSwimmingTickets(date?: string): Promise<ApiResponse<any
   return { data, error: null }
 }
 
+
 export async function createSwimmingTicket(input: {
-  ticketType: string
+  adultCount: number
+  childCount: number
   visitorName?: string
   visitorPhone?: string
   visitorAddress?: string
   visitorGender?: string
-  visitorCount: number
   paymentMethod: string
 }): Promise<ApiResponse<any>> {
   const user = await requirePermission(PERMISSIONS.SWIMMING_TICKETS)
   const supabase = await createClient()
 
-  const { data: settings } = await supabase
-    .from('settings')
-    .select('pool_adult_price, pool_child_price, pool_family_price')
-    .eq('restaurant_id', user.restaurantId)
-    .single()
+  const ADULT_PRICE = 200
+  const CHILD_PRICE = 150
 
-  // Reusing pool prices for swimming for now, or you can add swimming_adult_price in settings
-  const priceMap: Record<string, number> = {
-    adult: 200, // Hardcoded for Swimming as requested (adult: 200)
-    child: 150, // Hardcoded for Swimming as requested (kid: 150)
-    family: settings?.pool_family_price ?? 500,
-    member: 0,
-    staff: 0,
-  }
+  const adultCount = Math.max(0, input.adultCount || 0)
+  const childCount = Math.max(0, input.childCount || 0)
+  const totalCount = adultCount + childCount
 
-  const price = (priceMap[input.ticketType] ?? 200) * input.visitorCount
+  if (totalCount < 1) return { data: null, error: 'At least 1 visitor required' }
+
+  const price = (adultCount * ADULT_PRICE) + (childCount * CHILD_PRICE)
+
+  // Build a human-readable summary for the notes/type field
+  const parts: string[] = []
+  if (adultCount > 0) parts.push(`${adultCount} Adult${adultCount > 1 ? 's' : ''}`)
+  if (childCount > 0) parts.push(`${childCount} Child${childCount > 1 ? 'ren' : ''}`)
+  const summary = parts.join(' + ')
+
+  // ticket_type: 'adult' if only adults, 'child' if only children, 'mixed' otherwise
+  const ticketType = adultCount > 0 && childCount > 0 ? 'adult' : adultCount > 0 ? 'adult' : 'child'
 
   const { data, error } = await supabase
     .from('swimming_tickets')
     .insert({
       restaurant_id: user.restaurantId,
-      ticket_type: input.ticketType,
+      ticket_type: ticketType,
       visitor_name: input.visitorName || null,
       visitor_phone: input.visitorPhone || null,
       visitor_address: input.visitorAddress || null,
       visitor_gender: input.visitorGender || null,
-      visitor_count: input.visitorCount,
+      visitor_count: totalCount,
       price,
       payment_method: input.paymentMethod,
       payment_status: 'paid',
       valid_date: new Date().toISOString().split('T')[0],
       check_in_time: new Date().toISOString(),
       sold_by: user.id,
+      notes: summary,   // e.g. "2 Adults + 2 Children"
     })
     .select()
     .single()
