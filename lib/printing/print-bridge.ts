@@ -477,18 +477,27 @@ export async function printSwimmingTicket(ticket: SwimmingTicketData): Promise<v
 
     toast.loading('Printing swimming ticket...', { id: 'swim-print-toast' })
 
+    const cap = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s
+    const label = ticket.notes || `${ticket.ticket_type} Ticket`
+
+    // Visitor info as zero-price line items so they print on the receipt
+    const visitorLines: { name: string; quantity: number; price: number }[] = []
+    if (ticket.visitor_name)    visitorLines.push({ name: `Name    : ${ticket.visitor_name}`,    quantity: 1, price: 0 })
+    if (ticket.visitor_phone)   visitorLines.push({ name: `Phone   : ${ticket.visitor_phone}`,   quantity: 1, price: 0 })
+    if (ticket.visitor_address) visitorLines.push({ name: `Address : ${ticket.visitor_address}`, quantity: 1, price: 0 })
+    if (ticket.visitor_gender)  visitorLines.push({ name: `Gender  : ${cap(ticket.visitor_gender)}`, quantity: 1, price: 0 })
+
     const fakeOrder = {
       order_number: ticket.ticket_number || ticket.id.split('-')[0].toUpperCase(),
       created_at:   ticket.check_in_time || ticket.created_at || new Date().toISOString(),
       order_type:   'swimming_ticket',
       subtotal:     ticket.price,
       total:        ticket.price,
-      items: [{
-        name:     `${ticket.notes || ticket.ticket_type} Ticket`,
-        quantity: ticket.visitor_count,
-        price:    ticket.price / (ticket.visitor_count || 1),
-      }],
-      _swimming_ticket: ticket,
+      items: [
+        { name: label, quantity: 1, price: ticket.price },
+        ...(visitorLines.length > 0 ? [{ name: '- - - Visitor Info - - -', quantity: 1, price: 0 }] : []),
+        ...visitorLines,
+      ],
     }
 
     const result = await nativePrintReceipt({
