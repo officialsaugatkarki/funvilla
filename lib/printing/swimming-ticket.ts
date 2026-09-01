@@ -116,11 +116,13 @@ export function buildSwimmingTicketHtml(ticket: SwimmingTicketData): string {
       <td style="padding:2px 4px;text-align:right;font-size:12px;">${value}</td>
     </tr>`
 
+  const hasVisitorInfo = !!(ticket.visitor_name || ticket.visitor_phone || ticket.visitor_address || ticket.visitor_gender)
+
   const visitorRows = [
-    ticket.visitor_name    ? infoRow('Name',    ticket.visitor_name)                  : '',
-    ticket.visitor_phone   ? infoRow('Phone',   ticket.visitor_phone)                 : '',
-    ticket.visitor_address ? infoRow('Address', ticket.visitor_address)               : '',
-    ticket.visitor_gender  ? infoRow('Gender',  capitalize(ticket.visitor_gender!))   : '',
+    ticket.visitor_name    ? infoRow('Name',    ticket.visitor_name)                 : '',
+    ticket.visitor_phone   ? infoRow('Phone',   ticket.visitor_phone)                : '',
+    ticket.visitor_address ? infoRow('Address', ticket.visitor_address)              : '',
+    ticket.visitor_gender  ? infoRow('Gender',  capitalize(ticket.visitor_gender!))  : '',
   ].join('')
 
   return `<!DOCTYPE html>
@@ -186,7 +188,8 @@ export function buildSwimmingTicketHtml(ticket: SwimmingTicketData): string {
 
   <div class="divider-dash"></div>
 
-  ${visitorRows ? `<table>${visitorRows}</table><div class="divider-dash"></div>` : ''}
+  ${hasVisitorInfo ? `<table>${visitorRows}</table><div class="divider-dash"></div>` : ''}
+
 
   <p class="ticket-type">${label}${ticket.visitor_count > 1 ? ' x ' + ticket.visitor_count : ''}</p>
 

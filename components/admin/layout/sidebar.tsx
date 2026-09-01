@@ -28,8 +28,8 @@ import type { RoleName } from '@/lib/types'
 
 // Map roles to allowed paths. Real security is enforced server-side.
 const ROLE_PATHS: Record<RoleName, string[]> = {
-  owner: ['*'],
-  admin: ['*'],
+  owner: ['/admin/dashboard', '/admin/pos', '/admin/swimming', '/admin/rooms'],
+  admin: ['/admin/dashboard', '/admin/pos', '/admin/swimming', '/admin/rooms'],
   manager: [
     '/admin/dashboard', '/admin/menu', '/admin/orders', '/admin/pos',
     '/admin/kitchen', '/admin/tables', '/admin/rooms', '/admin/bookings',
